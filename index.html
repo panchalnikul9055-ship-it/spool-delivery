@@ -1,0 +1,1031 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spool Delivery Tracking</title>
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "1";</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+/* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
+:root {
+  --bg:#f3f6fb; --surface:#fff; --ink:#1c1c1b; --muted:#575d66; --line:#d3dbe9; --panel:#e7eef9;
+  --accent:#30a9e1; --accent-ink:#1c1c1b; --accent-deep:#1b7fb0; --black:#000;
+  --ok:#1f7a4d; --warn:#9a5600; --bad:#b3261e; --ok-bg:#e3f2ea; --warn-bg:#fdf0d9; --bad-bg:#f8d7d4;
+  --display:"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --body:"Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:Consolas,"Roboto Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--body); font-size:15px; }
+.brandbar { position:sticky; top:0; z-index:7; background:var(--black); color:#fff; height:48px; display:flex; align-items:center; padding:0 16px; gap:12px; }
+.brandbar .mark { font-weight:800; font-size:17px; letter-spacing:.14em; line-height:1; }
+.brandbar .mark small { display:block; font-size:8px; letter-spacing:.42em; font-weight:600; margin-top:3px; opacity:.85; }
+.brandbar .sep { width:1px; height:24px; background:#4a4a4a; }
+.brandbar .app { font-size:14px; font-weight:600; letter-spacing:.02em; }
+.wrap { max-width:560px; margin:0 auto; padding:0 16px 150px; display:grid; gap:14px; }
+
+header.top { position:sticky; top:48px; z-index:5; background:var(--surface); padding:12px 16px 10px; margin:0 -16px; border-bottom:1px solid var(--line);
+  box-shadow:0 2px 6px rgba(28,28,27,.06); display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+.eyebrow { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent-deep); font-weight:700; }
+h1 { font-family:var(--display); font-weight:700; font-size:24px; line-height:1.1; margin:3px 0 0; }
+h2 { font-family:var(--display); font-size:17px; font-weight:700; margin:0; display:flex; align-items:center; gap:10px; }
+h2::before { content:""; width:22px; height:3px; background:var(--accent); flex:none; }
+.count { text-align:right; }
+.count b { display:block; font-family:var(--display); font-size:34px; font-weight:700; line-height:.95; color:var(--ink); font-variant-numeric:tabular-nums; }
+.count span { font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.who { font-size:13px; color:var(--muted); }
+.who button { font:600 13px var(--body); }
+
+.card { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px; display:grid; gap:12px; box-shadow:0 1px 3px rgba(28,28,27,.05); }
+.big { width:100%; border:0; border-radius:8px; cursor:pointer; background:var(--accent); color:var(--accent-ink);
+  font-family:var(--display); font-weight:700; font-size:20px; letter-spacing:.02em;
+  padding:20px 16px; display:flex; align-items:center; justify-content:center; gap:12px; box-shadow:0 2px 6px rgba(48,169,225,.35); }
+.big.dark { background:var(--black); color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.big svg { width:28px; height:28px; flex:none; }
+.btn { border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:8px;
+  font-family:var(--body); font-weight:600; font-size:15px; padding:12px 14px; cursor:pointer; }
+.btn.primary { background:var(--accent); color:var(--accent-ink); border-color:transparent; }
+.btn:disabled, .big:disabled { opacity:.4; cursor:not-allowed; }
+.linkbtn { background:none; border:0; color:var(--muted); font:600 13px var(--body); cursor:pointer; text-decoration:underline; padding:4px; }
+.row2 { display:flex; gap:8px; } .row2 > * { flex:1; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid var(--ink); outline-offset:2px; }
+
+label.f { display:block; font-size:13px; font-weight:600; color:var(--muted); }
+label.f > input, label.f > select, label.f > textarea { margin-top:5px; }
+.wrap > section { display:grid; gap:12px; }
+label.f .req { color:var(--bad); }
+input, select, textarea { font:500 16px var(--body); padding:12px; border:1px solid var(--line); border-radius:8px;
+  background:var(--surface); color:var(--ink); width:100%; min-width:0; }
+textarea { resize:vertical; }
+.mono { font-family:var(--mono); }
+
+.kv { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:14px; margin:0; }
+.kv dt { color:var(--muted); } .kv dd { margin:0; font-weight:600; word-break:break-word; }
+.dn { font-family:var(--mono); font-weight:600; }
+
+.cam { position:relative; background:#000; border-radius:10px; overflow:hidden; aspect-ratio:1/1; }
+.cam video { width:100%; height:100%; object-fit:cover; display:block; }
+.cam .frame { position:absolute; inset:15%; border:3px solid var(--accent); border-radius:12px; box-shadow:0 0 0 9999px rgba(0,0,0,.35); pointer-events:none; transition:border-color .2s; }
+.cam.hit .frame { border-color:#3ddc84; }
+.cam .camclose { position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:8px; padding:8px 12px; font:600 14px var(--body); cursor:pointer; }
+.cam .camtip { position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:13px; text-shadow:0 1px 3px #000; }
+.manual { display:flex; gap:8px; } .manual input { flex:1; font-family:var(--mono); font-size:14px; }
+
+.status { border-radius:8px; padding:10px 12px; font-size:14px; font-weight:500; display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.status code { font-family:var(--mono); font-weight:600; word-break:break-all; }
+.status.ok { background:var(--ok-bg); color:var(--ok); }
+.status.warn { background:var(--warn-bg); color:var(--warn); }
+.status.bad { background:var(--bad-bg); color:var(--bad); }
+
+.log-head { display:flex; justify-content:space-between; align-items:baseline; }
+ol.log { list-style:none; margin:0; padding:0; background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+ol.log li { display:grid; grid-template-columns:30px 1fr auto; gap:10px; align-items:center; padding:11px 12px; border-top:1px solid var(--line); }
+ol.log li:first-child { border-top:0; }
+ol.log li.fresh { animation:flash 1.2s ease-out; }
+ol.log li.extra { background:var(--warn-bg); }
+ol.log li.missing { background:var(--bad-bg); }
+ol.log li.locked { background:var(--bg); color:var(--muted); }
+ol.log li.locked code { color:var(--muted); }
+ol.log li.pending { background:var(--bg); }
+.lock { font-size:16px; width:36px; text-align:center; }
+.sub { font-family:var(--display); font-size:14px; font-weight:700; color:var(--muted); margin:4px 0 0; }
+@keyframes flash { from { background:var(--ok-bg); } to { background:transparent; } }
+.idx { font-family:var(--mono); font-size:12px; color:var(--muted); }
+.spool code { font-family:var(--mono); font-weight:600; font-size:15px; word-break:break-all; display:block; }
+.spool small { color:var(--muted); font-size:12px; }
+.tag { font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:2px 6px; border-radius:4px; }
+.trip .tag.warn { background:var(--panel); color:var(--accent-deep); }
+.tag.ok { background:var(--ok-bg); color:var(--ok); } .tag.warn { background:var(--warn-bg); color:var(--warn); } .tag.bad { background:var(--bad-bg); color:var(--bad); }
+.del { background:none; border:1px solid transparent; color:var(--muted); border-radius:6px; width:36px; height:36px; cursor:pointer; font-size:20px; }
+.empty { border:2px dashed var(--line); border-radius:10px; padding:24px 16px; text-align:center; color:var(--muted); }
+
+.trip { text-align:left; width:100%; cursor:pointer; display:grid; gap:4px; }
+.trip .t1 { display:flex; justify-content:space-between; gap:8px; }
+.trip small { color:var(--muted); }
+
+.bar { position:fixed; left:0; right:0; bottom:0; z-index:6; background:var(--surface); border-top:1px solid var(--line);
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px)); }
+.bar-inner { max-width:560px; margin:0 auto; display:grid; gap:8px; }
+.photo-prev { max-width:100%; border-radius:8px; border:1px solid var(--line); }
+.spin { display:inline-block; width:16px; height:16px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:sp 1s linear infinite; vertical-align:-3px; }
+@keyframes sp { to { transform:rotate(360deg); } }
+.result { text-align:center; padding:20px 14px; }
+.result b { display:block; font-family:var(--display); font-size:24px; }
+.mailcard { margin-top:12px; padding:16px 14px; border:2px solid var(--accent); }
+.mailcard h3 { margin:0 0 6px; font-size:17px; }
+.mailcard p { margin:0 0 10px; font-size:14px; color:var(--muted); line-height:1.4; }
+a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px; text-decoration:none; background:var(--accent); color:var(--accent-ink);
+  font-weight:700; font-size:19px; border-radius:10px; padding:16px; margin:8px 0 10px; }
+.mailcard .links { display:flex; gap:8px; flex-wrap:wrap; }
+.mailcard .links a, .mailcard .links button { flex:1; text-align:center; text-decoration:none; font-size:14px; }
+.empty { background:var(--panel); border-color:var(--line); }
+.who b { color:var(--ink); }
+.netpill { background:#fdf0d9; color:#a35c00; border-radius:8px; padding:8px 10px; font-size:13px; margin:0 0 10px; }
+#outbox h2 { margin:0 0 4px; }
+.obx { border-top:1px solid var(--line); padding:10px 0; display:grid; gap:3px; font-size:14px; }
+.obx b { font-size:15px; } .obx.waiting b { color:#a35c00; } .obx.sent b { color:#1f7a4d; } .obx.error b { color:var(--bad); }
+.obx small { color:var(--muted); } .obx small.err { color:var(--bad); }
+.obx .links { display:flex; gap:8px; margin-top:6px; } .obx .links > * { flex:1; text-align:center; text-decoration:none; }
+@media (prefers-reduced-motion: reduce) { ol.log li.fresh { animation:none; } .spin { animation:none; } }
+</style>
+</head>
+<body data-dn="">
+<div class="brandbar"><span class="app">Spool Delivery Tracking</span></div>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow" id="eyebrow">Spool delivery tracking</div>
+      <h1 id="title">Spool Delivery Tracking</h1>
+    </div>
+    <div class="count" id="countBox" hidden><b id="count">0</b><span id="countLabel">Scanned</span></div>
+  </header>
+
+  <div id="netPill" class="netpill" hidden></div>
+  <div id="status" class="status" hidden></div>
+
+  <!-- 1. Who are you (asked once per phone) -->
+  <section id="vProfile" hidden>
+    <div class="card">
+      <h2>Who is using this phone?</h2>
+      <p class="who" style="margin:0">Your name goes on every delivery you send or receive. Your email gets the confirmations.</p>
+      <label class="f">Your name <span class="req">*</span>
+        <input id="pName" list="peopleNames" autocomplete="name"></label>
+      <label class="f">Your email <span class="req">*</span>
+        <input id="pEmail" type="email" autocomplete="email" inputmode="email"></label>
+      <button class="btn primary" id="pSave" type="button">Continue</button>
+    </div>
+  </section>
+
+  <!-- 2. Home -->
+  <section id="vHome" hidden>
+    <p class="who" style="margin:0">Signed in as <b id="meName"></b> · <button class="linkbtn" id="changeMe" type="button">change</button></p>
+    <div id="outbox" class="card" hidden></div>
+    <div id="draftCard" class="card" hidden>
+      <h2>Unfinished</h2>
+      <p id="draftText" style="margin:0"></p>
+      <div class="row2">
+        <button class="btn primary" id="draftResume" type="button">Continue</button>
+        <button class="btn" id="draftDiscard" type="button">Discard</button>
+      </div>
+    </div>
+    <div style="display:grid;gap:12px">
+      <button class="big" id="goDispatch" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+        Dispatch spools</button>
+      <button class="big dark" id="goReceive" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
+        Receive spools</button>
+    </div>
+  </section>
+
+  <!-- 3. Dispatch header -->
+  <section id="vDispatch" hidden>
+    <div class="card">
+      <h2>Delivery details</h2>
+      <label class="f">Project No <span class="req">*</span><select id="dProject"></select></label>
+      <div class="row2">
+        <label class="f">From <span class="req">*</span><select id="dFrom"></select></label>
+        <label class="f">To <span class="req">*</span><select id="dTo"></select></label>
+      </div>
+      <label class="f">Purpose <span class="req">*</span><select id="dPurpose"></select></label>
+      <label class="f">Delivered by
+        <input id="dBy" readonly></label>
+      <label class="f">Delivering to (receiver) <span class="req">*</span><select id="dRecv"></select></label>
+      <div id="dRecvOther" class="row2" hidden>
+        <label class="f">Receiver name <span class="req">*</span><input id="dRecvName"></label>
+        <label class="f">Receiver email <span class="req">*</span><input id="dRecvEmail" type="email" inputmode="email"></label>
+      </div>
+      <label class="f">Remarks (optional)<textarea id="dRemarks" rows="2"></textarea></label>
+    </div>
+  </section>
+
+  <!-- 4. Receive: pick a delivery -->
+  <section id="vReceiveList" hidden>
+    <div class="card">
+      <h2>Deliveries on the way</h2>
+      <label class="f">Show deliveries to<select id="rFilter"></select></label>
+      <div class="manual">
+        <input id="rDnInput" placeholder="Or type DN No (e.g. DN-2790-0001)" aria-label="DN number" class="mono">
+        <button class="btn" id="rDnGo" type="button">Open</button>
+      </div>
+    </div>
+    <div id="rList" style="display:grid;gap:10px"></div>
+  </section>
+
+  <!-- 5. Scanning (dispatch and receive) -->
+  <section id="vScan" hidden>
+    <div class="card" id="tripCard"></div>
+
+    <button class="big" id="liveBtn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
+      Scan spool QR</button>
+    <div class="cam" id="camBox" hidden>
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+      <button class="camclose" id="camClose" type="button">Stop</button>
+      <div class="camtip">Point at a tag — it adds itself. Move to the next tag.</div>
+    </div>
+    <div class="row2">
+      <button class="btn" id="photoBtn" type="button">Take a photo</button>
+      <button class="btn" id="galleryBtn" type="button">From gallery</button>
+    </div>
+    <input type="file" id="cam" accept="image/*" capture="environment" hidden>
+    <input type="file" id="gallery" accept="image/*" hidden>
+    <form class="manual" id="manualForm" autocomplete="off">
+      <input id="manualInput" placeholder="Or type spool no." aria-label="Spool number">
+      <button class="btn" type="submit">Add</button>
+    </form>
+
+    <div class="log-head"><h2>Scanned spools</h2><button class="linkbtn" id="clearBtn" type="button" hidden>Clear list</button></div>
+    <div id="empty" class="empty">No spools scanned yet. Duplicates are skipped automatically.</div>
+    <ol class="log" id="log" hidden></ol>
+    <div id="lockedWrap" hidden>
+      <p class="sub" id="lockedTitle">Confirmed earlier — locked</p>
+      <ol class="log" id="lockedLog"></ol>
+    </div>
+  </section>
+
+  <!-- 6. Review and submit -->
+  <section id="vReview" hidden>
+    <div class="card" id="reviewSummary"></div>
+    <div class="card">
+      <h2>Proof (optional)</h2>
+      <button class="btn" id="proofBtn" type="button">Add photo of the spools / trailer</button>
+      <input type="file" id="proofInput" accept="image/*" capture="environment" hidden>
+      <img id="proofPrev" class="photo-prev" alt="Proof photo" hidden>
+      <label class="f" id="rRemarksWrap">Remarks (optional)<textarea id="rRemarks" rows="2" placeholder="e.g. one spool with damaged coating"></textarea></label>
+      <p class="who" id="gpsNote" style="margin:0"></p>
+    </div>
+  </section>
+
+  <!-- 7. Done -->
+  <section id="vDone" hidden>
+    <div class="card result" id="doneBox"></div>
+    <div class="card mailcard" id="mailBox" hidden></div>
+    <button class="btn" id="doneHome" type="button" style="width:100%;margin-top:12px">Back to start</button>
+  </section>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <div class="bar-inner">
+    <div class="row2" id="clearConfirm" hidden>
+      <button class="btn" id="clearNo" type="button">Keep list</button>
+      <button class="btn" id="clearYes" type="button" style="color:var(--bad)">Clear list</button>
+    </div>
+    <div class="row2">
+      <button class="btn" id="backBtn" type="button">Back</button>
+      <button class="big dark" id="nextBtn" type="button" style="padding:14px;font-size:20px;flex:2">Next</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="peopleNames"></datalist>
+
+<script src="jsQR.js"></script>
+<script>
+(function () {
+  var OPEN_DN = new URLSearchParams(location.search).get("dn") || "";
+  if (OPEN_DN.charAt(0) === "<") OPEN_DN = ""; // unprocessed template when opened outside Apps Script
+  var PROFILE_KEY = "sd-profile-v1", DRAFT_KEY = "sd-draft-v1";
+  var $ = function (id) { return document.getElementById(id); };
+  var cfg = { projects: [], locations: [], purposes: [], people: [] };
+  var me = load(PROFILE_KEY) || null;
+  var draft = load(DRAFT_KEY) || null;   // { mode, ref, header|delivery, items:[{spool,ts}] }
+  var view = "", busy = false, proofData = "", gps = null, lastAdded = null;
+
+  /* ---------- small helpers ---------- */
+  function load(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } }
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function saveDraft() { store(DRAFT_KEY, draft); }
+  function p2(n) { return String(n).padStart(2, "0"); }
+  function fmt(ts) { var d = new Date(ts); return p2(d.getDate()) + "-" + p2(d.getMonth() + 1) + "-" + d.getFullYear() + " " + p2(d.getHours()) + ":" + p2(d.getMinutes()) + ":" + p2(d.getSeconds()); }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function el(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === "text") e.textContent = attrs[k]; else if (k === "cls") e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    return e;
+  }
+  function setStatus(kind, msg, code) {
+    var s = $("status"); s.className = "status " + kind; s.textContent = "";
+    s.appendChild(el("span", { text: msg })); if (code) s.appendChild(el("code", { text: code }));
+    s.hidden = false;
+  }
+  function clearStatus() { $("status").hidden = true; }
+  /* ================= Offline support (offline app only) =================
+     - Reads (lists, deliveries) come from the server when there is signal and are saved on the phone;
+       without signal the saved copy is used.
+     - Dispatches / receipts that can't reach the server go into an Outbox on the phone and are sent
+       automatically when signal returns. Each one keeps its reference, so nothing is ever recorded twice. */
+  var OFF = (function () {
+    var API = window.SPOOL_API, Q_KEY = "sd-outbox-v1", B_KEY = "sd-bundle-v1", C_KEY = "sd-config-v1";
+    var syncing = false, usedSaved = false;
+
+    function netErr(msg) { var e = new Error(msg || "No signal"); e.network = true; return e; }
+    function post(fn, args, ms) {
+      return new Promise(function (resolve, reject) {
+        var done = false;
+        var t = setTimeout(function () { if (!done) { done = true; reject(netErr("Timed out")); } }, ms || 20000);
+        var finish = function (f, v) { if (done) return; done = true; clearTimeout(t); f(v); };
+        if (navigator.onLine === false) return finish(reject, netErr("Offline"));
+        fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ fn: fn, args: args }), redirect: "follow" })
+          .then(function (r) { if (!r.ok) throw netErr("HTTP " + r.status); return r.json(); })
+          .then(function (j) {
+            if (j && j.error) { var e = new Error(j.error); e.server = true; finish(reject, e); }
+            else finish(resolve, j ? j.ok : null);
+          })
+          .catch(function (e) { finish(reject, e && e.server ? e : netErr(e && e.message)); });
+      });
+    }
+
+    function queue() { return load(Q_KEY) || []; }
+    function saveQueue(q) {
+      try { localStorage.setItem(Q_KEY, JSON.stringify(q)); return true; }
+      catch (e) {
+        // Phone storage full: drop proof photos from waiting items rather than lose the scans
+        q.forEach(function (i) { if (i.args && i.args[0] && i.args[0].photo) { i.args[0].photo = ""; i.photoDropped = true; } });
+        try { localStorage.setItem(Q_KEY, JSON.stringify(q)); return true; } catch (e2) { return false; }
+      }
+    }
+    function bundle() { return load(B_KEY); }
+    function saveBundle(b) { if (b) { store(B_KEY, b); if (b.config) store(C_KEY, b.config); } }
+    function refreshBundle() { return post("offlineBundle", [], 30000).then(function (b) { saveBundle(b); usedSaved = false; pill(); return b; }); }
+
+    function pill() {
+      var p = $("netPill"); if (!p) return;
+      var off = navigator.onLine === false || usedSaved;
+      var b = bundle();
+      p.hidden = !off;
+      p.textContent = "No signal — working from data saved on this phone" + (b && b.at ? " (" + b.at.slice(0, 16) + ")" : "") + ". Scans are kept and sent when signal returns.";
+    }
+
+    function label(fn, a) {
+      if (fn === "createDelivery") return "Dispatch " + a.from + " → " + a.to + " · " + (a.spools || []).length + " spools";
+      return "Receipt " + a.dn + " · " + (a.spools || []).length + " spools";
+    }
+    function enqueue(fn, args) {
+      var q = queue(), a = args[0] || {};
+      if (!q.some(function (i) { return i.id === a.ref; })) {
+        q.push({ id: a.ref, fn: fn, args: args, label: label(fn, a), at: Date.now(), state: "waiting",
+          toName: fn === "createDelivery" ? a.receiverName : (draft && draft.delivery ? draft.delivery.senderName : "") });
+      }
+      if (!saveQueue(q)) throw new Error("This phone's storage is full — the scans could not be saved offline. Move to signal and try again.");
+      setTimeout(renderOutbox, 0);
+      return { queued: true, dn: a.dn || "", count: (a.spools || []).length };
+    }
+
+    function cachedDelivery(dn) {
+      var b = bundle(); if (!b || !b.deliveries) return null;
+      var key = Object.keys(b.deliveries).filter(function (k) { return k.toUpperCase() === String(dn).trim().toUpperCase(); })[0];
+      if (!key) return null;
+      var d = JSON.parse(JSON.stringify(b.deliveries[key]));
+      // Spools this phone already confirmed but hasn't sent yet count as locked here too
+      queue().forEach(function (i) {
+        if (i.fn !== "confirmReceipt" || i.state === "error" || String(i.args[0].dn).toUpperCase() !== d.dn.toUpperCase()) return;
+        (i.args[0].spools || []).forEach(function (s) {
+          var sp = typeof s === "string" ? s : s.spool;
+          if (!d.received.some(function (r) { return r.spool.toUpperCase() === String(sp).toUpperCase(); })) d.received.push({ spool: sp, time: "(waiting to send)" });
+        });
+      });
+      var got = {}; d.received.forEach(function (r) { got[r.spool.toUpperCase()] = 1; });
+      d.pending = d.sent.filter(function (s) { return !got[s.spool.toUpperCase()]; });
+      d.fromPhone = true;
+      return d;
+    }
+
+    function call(fn, args) {
+      if (fn === "getConfig") {
+        return post("getConfig", [], 9000).then(function (c) { store(C_KEY, c); usedSaved = false; pill(); refreshBundle().catch(function () {}); return c; })
+          .catch(function (e) { if (e.server) throw e; var c = load(C_KEY); if (!c) throw new Error("No signal. Open the app once with signal so it can save the lists on this phone."); usedSaved = true; pill(); return c; });
+      }
+      if (fn === "listInTransit") {
+        var loc = args[0] || "";
+        var pick = function (list) { return (list || []).filter(function (t) { return !loc || t.to === loc; }); };
+        return refreshBundle().then(function (b) { return pick(b.inTransit); })
+          .catch(function (e) { if (e.server) throw e; var b = bundle(); if (!b) throw new Error("No signal and no deliveries saved on this phone yet."); usedSaved = true; pill(); return pick(b.inTransit); });
+      }
+      if (fn === "getDelivery") {
+        return post("getDelivery", args, 12000).then(function (d) {
+          var b = bundle(); if (b && b.deliveries) { b.deliveries[d.dn] = d; saveBundle(b); }
+          usedSaved = false; pill(); return d;
+        }).catch(function (e) {
+          if (e.server) throw e;
+          var d = cachedDelivery(args[0]);
+          if (!d) throw new Error("No signal, and " + args[0] + " isn't saved on this phone. Open the Receive list once with signal so deliveries are saved.");
+          usedSaved = true; pill(); return d;
+        });
+      }
+      if (fn === "createDelivery" || fn === "confirmReceipt") {
+        if (navigator.onLine === false) return Promise.resolve(enqueue(fn, args));
+        return post(fn, args, 60000).then(function (r) { refreshBundle().catch(function () {}); return r; })
+          .catch(function (e) { if (e.server) throw e; return enqueue(fn, args); });
+      }
+      return post(fn, args);
+    }
+
+    function sync() {
+      if (syncing) return Promise.resolve();
+      var waiting = queue().filter(function (i) { return i.state === "waiting"; });
+      if (!waiting.length || navigator.onLine === false) return Promise.resolve();
+      syncing = true; renderOutbox();
+      var step = function (k) {
+        if (k >= waiting.length) return Promise.resolve();
+        var item = waiting[k];
+        return post(item.fn, item.args, 60000).then(function (res) {
+          var q = queue(); q.forEach(function (i) { if (i.id === item.id) { i.state = "sent"; i.result = res; i.sentAt = Date.now(); if (i.args[0]) i.args[0].photo = ""; } });
+          saveQueue(q); renderOutbox();
+          return step(k + 1);
+        }).catch(function (e) {
+          if (!e.server) throw e; // still no signal: stop and try later
+          var q = queue(); q.forEach(function (i) { if (i.id === item.id) { i.state = "error"; i.error = e.message; } });
+          saveQueue(q); renderOutbox();
+          return step(k + 1);
+        });
+      };
+      return step(0).then(function () { return refreshBundle(); }).catch(function () {})
+        .then(function () { syncing = false; renderOutbox(); pill(); });
+    }
+
+    function remove(id) { saveQueue(queue().filter(function (i) { return i.id !== id; })); renderOutbox(); }
+
+    function renderOutbox() {
+      var box = $("outbox"); if (!box) return;
+      // Sent items whose email was opened more than a day ago tidy themselves away
+      var q = queue().filter(function (i) { return !(i.state === "sent" && i.mailOpened && Date.now() - i.mailOpened > 864e5); });
+      saveQueue(q);
+      box.textContent = ""; box.hidden = !q.length;
+      if (!q.length) return;
+      var waiting = q.filter(function (i) { return i.state === "waiting"; }).length;
+      box.appendChild(el("h2", { text: "Outbox" }));
+      box.appendChild(el("p", { cls: "who", style: "margin:0 0 8px", text: waiting ? (syncing ? "Sending…" : waiting + " saved on this phone — sent automatically when there is signal.") : "Everything has reached the register." }));
+      q.forEach(function (i) {
+        var row = el("div", { cls: "obx " + i.state });
+        var head = i.state === "sent" ? "✓ Sent" + (i.result && i.result.dn ? " · " + i.result.dn : "") : i.state === "error" ? "⚠ Not accepted" : "⏳ Waiting for signal";
+        row.appendChild(el("b", { text: head }));
+        row.appendChild(el("div", { text: i.label }));
+        row.appendChild(el("small", { text: "Saved " + fmt(i.at) + (i.photoDropped ? " · photo not kept (phone storage full)" : "") }));
+        if (i.state === "error") row.appendChild(el("small", { cls: "err", text: i.error }));
+        var acts = el("div", { cls: "links" });
+        if (i.state === "sent" && i.result && i.result.mail && !i.result.mail.error) {
+          var full = mailHref(i.result.mail, true), m = full.href.length > 1900 ? mailHref(i.result.mail, false) : full;
+          var a = el("a", { cls: "btn primary", href: m.href, target: "_blank", rel: "noopener", text: i.mailOpened ? "✉ Send email again" : "✉ Send email" });
+          a.addEventListener("click", function () { var q2 = queue(); q2.forEach(function (x) { if (x.id === i.id) x.mailOpened = Date.now(); }); saveQueue(q2); setTimeout(renderOutbox, 400); });
+          acts.appendChild(a);
+        }
+        if (i.state !== "waiting") {
+          var rm = el("button", { cls: "btn", type: "button", text: i.state === "sent" ? "Done" : "Remove" });
+          rm.addEventListener("click", function () { if (i.state === "sent" && !i.mailOpened && !confirm("The email for this has not been opened yet. Remove it anyway?")) return; remove(i.id); });
+          acts.appendChild(rm);
+        }
+        if (acts.childNodes.length) row.appendChild(acts);
+        box.appendChild(row);
+      });
+      if (waiting && !syncing && navigator.onLine !== false) {
+        var b = el("button", { cls: "btn", type: "button", text: "Send now" }); b.addEventListener("click", function () { sync(); });
+        box.appendChild(b);
+      }
+    }
+
+    window.addEventListener("online", function () { pill(); sync(); });
+    window.addEventListener("offline", pill);
+    setInterval(function () { if (queue().some(function (i) { return i.state === "waiting"; })) sync(); }, 30000);
+    return { call: call, sync: sync, renderOutbox: renderOutbox, pill: pill };
+  })();
+
+  function isEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim()); }
+
+  // Server calls: google.script.run in Apps Script; window.__mockServer for local testing
+  function server(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    if (window.SPOOL_API) return OFF.call(fn, args);
+    return new Promise(function (resolve, reject) {
+      if (window.google && google.script && google.script.run) {
+        var r = google.script.run.withSuccessHandler(resolve).withFailureHandler(function (e) { reject(e && e.message ? e : new Error(String(e))); });
+        r[fn].apply(r, args);
+      } else if (window.__mockServer) {
+        setTimeout(function () { try { resolve(window.__mockServer[fn].apply(null, args)); } catch (e) { reject(e); } }, 50);
+      } else reject(new Error("Not connected to the server."));
+    });
+  }
+  function friendly(e) {
+    var m = String(e && e.message || e || "");
+    if (/NetworkError|Failed to fetch|network|timed? ?out|connection/i.test(m)) return "No signal — your scans are saved on this phone. Move to better signal and tap the button again.";
+    return m.replace(/^Error:\s*/, "") || "Something went wrong. Try again.";
+  }
+
+  /* ---------- views ---------- */
+  function show(v) {
+    view = v;
+    ["vProfile", "vHome", "vDispatch", "vReceiveList", "vScan", "vReview", "vDone"].forEach(function (id) { $(id).hidden = id !== v; });
+    var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", draft && draft.mode === "receive" ? "Review receipt" : "Confirm and Send"],
+      vReview: ["Keep scanning", draft && draft.mode === "receive" ? "Confirm receipt" : "Send delivery"], vReceiveList: ["Back", null] }[v];
+    $("bar").hidden = !bar;
+    if (bar) { $("backBtn").textContent = bar[0]; $("nextBtn").hidden = !bar[1]; if (bar[1]) $("nextBtn").textContent = bar[1]; }
+    $("clearConfirm").hidden = true;
+    $("countBox").hidden = !(v === "vScan" || v === "vReview");
+    var t = { vProfile: ["Spool delivery tracking", "Welcome"], vHome: ["Home", "Spool Delivery Tracking"], vDispatch: ["Dispatch", "New delivery"],
+      vReceiveList: ["Receive", "Receive spools"], vScan: [draft && draft.mode === "receive" ? "Receive · " + draft.delivery.dn : "Dispatch · loading", "Scan spools"],
+      vReview: [draft && draft.mode === "receive" ? "Receive · " + draft.delivery.dn : "Dispatch", draft && draft.mode === "receive" ? "Check & submit" : "Check & send"], vDone: ["Spool delivery tracking", "Done"] }[v];
+    $("eyebrow").textContent = t[0]; $("title").textContent = t[1];
+    if (v !== "vScan") stopLive();
+    window.scrollTo(0, 0);
+  }
+
+  function goHome() {
+    clearStatus();
+    OFF.renderOutbox(); OFF.pill();
+    $("meName").textContent = me.name;
+    $("draftCard").hidden = !(draft && draft.items && draft.items.length);
+    if (draft && draft.items && draft.items.length) {
+      $("draftText").textContent = (draft.mode === "receive" ? "Receiving " + draft.delivery.dn : "Dispatch " + draft.header.from + " → " + draft.header.to) +
+        " — " + draft.items.length + " spool" + (draft.items.length === 1 ? "" : "s") + " scanned.";
+    }
+    show("vHome");
+  }
+
+  /* ---------- profile ---------- */
+  function startProfile() {
+    $("pName").value = me ? me.name : ""; $("pEmail").value = me ? me.email : "";
+    show("vProfile");
+  }
+  $("pName").addEventListener("change", function () {
+    var p = cfg.people.filter(function (x) { return x.name.toLowerCase() === $("pName").value.trim().toLowerCase(); })[0];
+    if (p && p.email && !$("pEmail").value) $("pEmail").value = p.email;
+  });
+  $("pSave").addEventListener("click", function () {
+    var n = $("pName").value.trim(), e = $("pEmail").value.trim();
+    if (!n) return setStatus("bad", "Enter your name.");
+    if (!isEmail(e)) return setStatus("bad", "Enter a valid email.");
+    me = { name: n, email: e }; store(PROFILE_KEY, me);
+    if (OPEN_DN) { var dn = OPEN_DN; OPEN_DN = ""; openDelivery(dn); } else goHome();
+  });
+  $("changeMe").addEventListener("click", startProfile);
+
+  /* ---------- dispatch header ---------- */
+  function fill(sel, items, placeholder) {
+    var cur = sel.value; sel.textContent = "";
+    sel.appendChild(el("option", { value: "", text: placeholder || "Select…" }));
+    items.forEach(function (i) { sel.appendChild(el("option", { value: i, text: i })); });
+    if (items.indexOf(cur) >= 0) sel.value = cur;
+  }
+  function fillPeople() {
+    var sel = $("dRecv"); sel.textContent = "";
+    sel.appendChild(el("option", { value: "", text: "Select receiver…" }));
+    cfg.people.forEach(function (p, i) { if (p.email) sel.appendChild(el("option", { value: String(i), text: p.name })); });
+    sel.appendChild(el("option", { value: "other", text: "Someone else (type name & email)" }));
+    var dl = $("peopleNames"); dl.textContent = "";
+    cfg.people.forEach(function (p) { dl.appendChild(el("option", { value: p.name })); });
+  }
+  $("dRecv").addEventListener("change", function () { $("dRecvOther").hidden = $("dRecv").value !== "other"; });
+
+  function startDispatch() {
+    clearStatus();
+    fill($("dProject"), cfg.projects); fill($("dFrom"), cfg.locations); fill($("dTo"), cfg.locations); fill($("dPurpose"), cfg.purposes);
+    if (cfg.projects.length === 1) $("dProject").value = cfg.projects[0];
+    fillPeople();
+    $("dBy").value = me.name + "  ·  " + me.email;
+    if (draft && draft.mode === "dispatch" && draft.header) {
+      var h = draft.header;
+      $("dProject").value = h.project; $("dFrom").value = h.from; $("dTo").value = h.to; $("dPurpose").value = h.purpose; $("dRemarks").value = h.remarks || "";
+      var idx = cfg.people.findIndex(function (p) { return p.name === h.receiverName && p.email === h.receiverEmail; });
+      $("dRecv").value = idx >= 0 ? String(idx) : "other";
+      if (idx < 0) { $("dRecvName").value = h.receiverName; $("dRecvEmail").value = h.receiverEmail; }
+      $("dRecvOther").hidden = idx >= 0;
+    } else {
+      $("dRemarks").value = ""; $("dRecv").value = ""; $("dRecvOther").hidden = true; $("dRecvName").value = ""; $("dRecvEmail").value = "";
+    }
+    show("vDispatch");
+  }
+  function readHeader() {
+    var h = { project: $("dProject").value, from: $("dFrom").value, to: $("dTo").value, purpose: $("dPurpose").value, remarks: $("dRemarks").value.trim() };
+    var r = $("dRecv").value;
+    if (r === "other") { h.receiverName = $("dRecvName").value.trim(); h.receiverEmail = $("dRecvEmail").value.trim(); }
+    else if (r !== "") { h.receiverName = cfg.people[+r].name; h.receiverEmail = cfg.people[+r].email; }
+    var miss = [];
+    if (!h.project) miss.push("Project"); if (!h.from) miss.push("From"); if (!h.to) miss.push("To"); if (!h.purpose) miss.push("Purpose");
+    if (!h.receiverName) miss.push("Receiver name");
+    if (miss.length) { setStatus("bad", "Please fill: " + miss.join(", ")); return null; }
+    if (!isEmail(h.receiverEmail)) { setStatus("bad", "Receiver email is not valid."); return null; }
+    if (h.from === h.to) { setStatus("bad", "From and To can't be the same location."); return null; }
+    return h;
+  }
+
+  /* ---------- receive: choose a delivery ---------- */
+  function startReceive() {
+    clearStatus();
+    fill($("rFilter"), cfg.locations, "All locations");
+    var last = load("sd-last-loc"); if (last && cfg.locations.indexOf(last) >= 0) $("rFilter").value = last;
+    show("vReceiveList");
+    loadTrips();
+  }
+  function loadTrips() {
+    var box = $("rList"); box.textContent = "";
+    box.appendChild(el("p", { cls: "who", text: "Loading deliveries…" }));
+    server("listInTransit", $("rFilter").value).then(function (list) {
+      box.textContent = "";
+      if (!list.length) { box.appendChild(el("div", { cls: "empty", text: "No deliveries waiting" + ($("rFilter").value ? " for " + $("rFilter").value : "") + "." })); return; }
+      list.forEach(function (t) {
+        var b = el("button", { cls: "card trip", type: "button" }, [
+          el("div", { cls: "t1" }, [el("span", { cls: "dn", text: t.dn }), el("span", { cls: "tag warn", text: t.received ? t.received + "/" + t.count + " received" : t.count + " spools" })]),
+          el("div", { text: t.from + " → " + t.to }),
+          el("small", { text: t.purpose + " · from " + t.senderName + " · " + t.dispatchedAt })
+        ]);
+        b.addEventListener("click", function () { openDelivery(t.dn); });
+        box.appendChild(b);
+      });
+    }).catch(function (e) { box.textContent = ""; setStatus("bad", friendly(e)); });
+  }
+  $("rFilter").addEventListener("change", function () { store("sd-last-loc", $("rFilter").value); loadTrips(); });
+  $("rDnGo").addEventListener("click", function () { var v = $("rDnInput").value.trim(); if (v) openDelivery(v); });
+
+  function openDelivery(dn) {
+    setStatus("warn", "Opening " + dn + "…");
+    server("getDelivery", dn).then(function (d) {
+      var same = draft && draft.mode === "receive" && draft.delivery.dn.toUpperCase() === d.dn.toUpperCase();
+      if (!d.open) {
+        if (same) { draft = null; saveDraft(); }
+        goHome(); setStatus("warn", d.dn + " is closed — all its spools were already confirmed (last by " + d.receivedBy + " on " + d.receivedAt + ") or the office closed it. It can't be scanned again.");
+        return;
+      }
+      if (same) {
+        // Keep this phone's unsent scans, but refresh what is already locked (a colleague may have confirmed some meanwhile)
+        draft.delivery = d;
+        var before = draft.items.length;
+        draft.items = draft.items.filter(function (i) { return !isLocked(i.spool); });
+        saveDraft(); clearStatus(); show("vScan"); renderScan();
+        if (draft.items.length < before) setStatus("warn", (before - draft.items.length) + " of your scanned spool(s) were confirmed by someone else meanwhile and are now locked.");
+        return;
+      }
+      if (draft && draft.items && draft.items.length && !confirm("You have an unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : "dispatch") + ". Discard it and open " + d.dn + "?")) { goHome(); return; }
+      draft = { mode: "receive", ref: uid(), delivery: d, items: [] }; saveDraft();
+      clearStatus(); show("vScan"); renderScan();
+    }).catch(function (e) { setStatus("bad", friendly(e)); });
+  }
+
+  /* ---------- scanning list ---------- */
+  function isLocked(spool) {
+    if (!draft || draft.mode !== "receive") return false;
+    var u = spool.toUpperCase(), d = draft.delivery;
+    return d.received.concat(d.extra).some(function (s) { return s.spool.toUpperCase() === u; });
+  }
+  function onDn(spool) {
+    if (!draft || draft.mode !== "receive") return true;
+    var u = spool.toUpperCase();
+    return draft.delivery.sent.some(function (s) { return s.spool.toUpperCase() === u; });
+  }
+  function renderTrip() {
+    var c = $("tripCard"); c.textContent = "";
+    var rows;
+    if (draft.mode === "receive") {
+      var d = draft.delivery;
+      rows = [["DN No", d.dn], ["From → To", d.from + " → " + d.to], ["Purpose", d.purpose], ["Sent by", d.senderName + " · " + d.dispatchedAt], ["Spools sent", String(d.sent.length)]];
+      if (d.received.length) rows.push(["Already confirmed", d.received.length + " (locked) · " + (d.sent.length - d.received.length) + " balance to scan"]);
+      if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
+    } else {
+      var h = draft.header;
+      rows = [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivering to", h.receiverName]];
+    }
+    var dl = el("dl", { cls: "kv" });
+    rows.forEach(function (r) { dl.appendChild(el("dt", { text: r[0] })); dl.appendChild(el("dd", { text: r[1] })); });
+    c.appendChild(dl);
+  }
+  function renderScan() {
+    renderTrip();
+    var items = draft.items, recv = draft.mode === "receive";
+    $("count").textContent = recv ? (draft.delivery.received.length + items.filter(function (i) { return onDn(i.spool); }).length) + "/" + draft.delivery.sent.length : items.length;
+    var lk = recv ? draft.delivery.received.concat(draft.delivery.extra) : [];
+    $("lockedWrap").hidden = !lk.length;
+    var ll = $("lockedLog"); ll.textContent = "";
+    $("lockedTitle").textContent = "Confirmed earlier — locked (" + lk.length + ")";
+    lk.forEach(function (s, i) {
+      var extra = draft.delivery.extra.indexOf(s) >= 0;
+      ll.appendChild(el("li", { cls: "locked" }, [el("span", { cls: "idx", text: p2(i + 1) }),
+        el("div", { cls: "spool" }, [el("code", { text: s.spool }), el("small", { text: (extra ? "Not on DN · " : "") + s.time })]),
+        el("span", { cls: "lock", title: "Locked", text: "🔒" })]));
+    });
+    $("countLabel").textContent = recv ? "Received" : "Loaded";
+    $("empty").hidden = items.length > 0; $("log").hidden = items.length === 0; $("clearBtn").hidden = items.length === 0;
+    var log = $("log"); log.textContent = "";
+    for (var i = items.length - 1; i >= 0; i--) {
+      var it = items[i], ok = onDn(it.spool);
+      var li = el("li", { cls: (it.spool === lastAdded ? "fresh " : "") + (ok ? "" : "extra") }, [
+        el("span", { cls: "idx", text: p2(i + 1) }),
+        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
+        el("button", { cls: "del", type: "button", "aria-label": "Remove " + it.spool, "data-spool": it.spool, text: "×" })
+      ]);
+      log.appendChild(li);
+    }
+  }
+  $("log").addEventListener("click", function (e) {
+    var s = e.target.getAttribute && e.target.getAttribute("data-spool"); if (!s) return;
+    draft.items = draft.items.filter(function (x) { return x.spool !== s; }); saveDraft(); renderScan(); setStatus("warn", "Removed", s);
+  });
+  function add(raw) {
+    var spool = String(raw || "").trim();
+    if (!spool || !draft) return false;
+    if (isLocked(spool)) { setStatus("warn", "Already confirmed earlier — locked, not counted again:", spool); return false; }
+    if (draft.items.some(function (x) { return x.spool.toUpperCase() === spool.toUpperCase(); })) { setStatus("warn", "Already scanned, skipped:", spool); return false; }
+    draft.items.push({ spool: spool, ts: Date.now() }); lastAdded = spool; saveDraft(); renderScan();
+    if (onDn(spool)) setStatus("ok", "Added #" + draft.items.length + ":", spool);
+    else setStatus("warn", "Not on this delivery note — added as extra:", spool);
+    return true;
+  }
+  $("manualForm").addEventListener("submit", function (e) { e.preventDefault(); add($("manualInput").value); $("manualInput").value = ""; });
+  $("clearBtn").addEventListener("click", function () { $("clearConfirm").hidden = false; });
+  $("clearNo").addEventListener("click", function () { $("clearConfirm").hidden = true; });
+  $("clearYes").addEventListener("click", function () { draft.items = []; saveDraft(); renderScan(); $("clearConfirm").hidden = true; setStatus("warn", "List cleared."); });
+
+  function feedback(good) {
+    try { navigator.vibrate && navigator.vibrate(good ? 120 : [80, 60, 80]); } catch (e) {}
+    try {
+      var A = window.AudioContext || window.webkitAudioContext; if (!A) return;
+      var ac = feedback.ac || (feedback.ac = new A()), o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = good ? 1200 : 500; g.gain.value = 0.15; o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.14);
+    } catch (e) {}
+  }
+  function addScanned(txt) { if (add(txt)) feedback(onDn(String(txt).trim())); }
+
+  /* ---------- live camera ---------- */
+  var video = $("video"), camBox = $("camBox"), stream = null, running = false, detector = null, lastText = "", lastTime = 0;
+  var cv = document.createElement("canvas"), ctx = cv.getContext("2d", { willReadFrequently: true });
+  async function startLive() {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { setStatus("warn", "Live camera isn't available here. Use “Take a photo”."); return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false }); }
+    catch (e) { setStatus("warn", "Live camera is blocked here (" + (e && e.name || "blocked") + "). Use “Take a photo” — one tag per photo."); return; }
+    video.srcObject = stream; camBox.hidden = false; $("liveBtn").hidden = true;
+    try { await video.play(); } catch (e) {}
+    if ("BarcodeDetector" in window) { try { detector = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { detector = null; } }
+    running = true; setStatus("ok", "Camera on. Point at a QR tag."); loop();
+  }
+  function stopLive() {
+    running = false;
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    video.srcObject = null; camBox.hidden = true; $("liveBtn").hidden = false;
+  }
+  async function loop() {
+    if (!running) return;
+    if (video.readyState >= 2 && video.videoWidth) {
+      var txt = null;
+      if (detector) { try { var c = await detector.detect(video); if (c && c.length) txt = c[0].rawValue; } catch (e) { detector = null; } }
+      if (!txt && window.jsQR) {
+        var vw = video.videoWidth, vh = video.videoHeight, s = Math.min(1, 800 / Math.max(vw, vh));
+        cv.width = Math.round(vw * s); cv.height = Math.round(vh * s); ctx.drawImage(video, 0, 0, cv.width, cv.height);
+        var r = jsQR(ctx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height, { inversionAttempts: "dontInvert" });
+        if (r && r.data) txt = r.data;
+      }
+      if (txt) {
+        var now = Date.now();
+        if (!(txt === lastText && now - lastTime < 2500)) {
+          lastText = txt; lastTime = now;
+          if (add(txt)) { feedback(onDn(txt.trim())); camBox.classList.add("hit"); setTimeout(function () { camBox.classList.remove("hit"); }, 500); }
+        }
+      }
+    }
+    setTimeout(function () { requestAnimationFrame(loop); }, 120);
+  }
+  document.addEventListener("visibilitychange", function () { if (document.hidden && running) stopLive(); });
+  $("liveBtn").addEventListener("click", startLive);
+  $("camClose").addEventListener("click", function () { stopLive(); clearStatus(); });
+
+  /* ---------- photo decoding ---------- */
+  function loadImage(file) {
+    if (window.createImageBitmap) return createImageBitmap(file, { imageOrientation: "from-image" }).catch(function () { return createImageBitmap(file); }).catch(function () { return viaImg(file); });
+    return viaImg(file);
+  }
+  function viaImg(file) {
+    return new Promise(function (res, rej) { var u = URL.createObjectURL(file), i = new Image(); i.onload = function () { res(i); }; i.onerror = function () { rej(new Error("img")); }; i.src = u; });
+  }
+  function grab(src, sx, sy, sw, sh, max) {
+    var s = Math.min(1, max / Math.max(sw, sh)), w = Math.max(1, Math.round(sw * s)), h = Math.max(1, Math.round(sh * s));
+    var c = document.createElement("canvas"); c.width = w; c.height = h;
+    var x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
+    return { data: x.getImageData(0, 0, w, h), w: w, h: h };
+  }
+  async function decodeFile(file) {
+    setStatus("warn", "Reading QR code…");
+    var src; try { src = await loadImage(file); } catch (e) { setStatus("bad", "This photo couldn't be opened. Set the camera to JPEG and try again."); return; }
+    var W = src.width, H = src.height;
+    if ("BarcodeDetector" in window) {
+      try { var codes = await new BarcodeDetector({ formats: ["qr_code"] }).detect(src); if (codes && codes.length && codes[0].rawValue) { addScanned(codes[0].rawValue); return; } } catch (e) {}
+    }
+    var regions = [[0, 0, W, H], [W * .15, H * .15, W * .7, H * .7], [W * .25, H * .25, W * .5, H * .5]], sizes = [1000, 1600, 700, 2400];
+    for (var r = 0; r < regions.length; r++) for (var k = 0; k < sizes.length; k++) {
+      var g = regions[r], f = grab(src, g[0], g[1], g[2], g[3], sizes[k]);
+      var res = window.jsQR && jsQR(f.data.data, f.w, f.h, { inversionAttempts: "attemptBoth" });
+      if (res && res.data) { addScanned(res.data); return; }
+      await new Promise(function (ok) { setTimeout(ok, 0); });
+    }
+    setStatus("bad", "No QR code found. Fill most of the photo with one tag, hold steady, avoid glare.");
+  }
+  $("photoBtn").addEventListener("click", function () { $("cam").value = ""; $("cam").click(); });
+  $("galleryBtn").addEventListener("click", function () { $("gallery").value = ""; $("gallery").click(); });
+  function onPick(e) { var f = e.target.files && e.target.files[0]; if (f) decodeFile(f); }
+  $("cam").addEventListener("change", onPick); $("gallery").addEventListener("change", onPick);
+
+  /* ---------- review ---------- */
+  function startReview() {
+    var c = $("reviewSummary"); c.textContent = "";
+    var items = draft.items;
+    if (draft.mode === "receive") {
+      var d = draft.delivery, scanSet = {};
+      items.forEach(function (i) { scanSet[i.spool.toUpperCase()] = 1; });
+      d.received.forEach(function (s) { scanSet[s.spool.toUpperCase()] = 1; });
+      var pending = d.sent.filter(function (s) { return !scanSet[s.spool.toUpperCase()]; });
+      var extra = items.filter(function (i) { return !onDn(i.spool); });
+      var now = items.length - extra.length, total = d.received.length + now;
+      c.appendChild(el("h2", { text: d.dn }));
+      c.appendChild(el("div", { cls: "status " + (pending.length || extra.length ? "warn" : "ok") }, [el("span", {
+        text: (now + " confirming now" + (d.received.length ? " (+ " + d.received.length + " locked earlier)" : "") + " · total " + total + " of " + d.sent.length) +
+          (pending.length ? " · " + pending.length + " still pending" : "") + (extra.length ? " · " + extra.length + " not on DN" : "") +
+          (!pending.length && !extra.length ? ". Delivery complete." : "")
+      })]));
+      if (pending.length || extra.length) {
+        var ol = el("ol", { cls: "log" });
+        pending.forEach(function (s) { ol.appendChild(el("li", { cls: "pending" }, [el("span", { cls: "idx", text: "" }), el("div", { cls: "spool" }, [el("code", { text: s.spool })]), el("span", { cls: "tag warn", text: "Pending" })])); });
+        extra.forEach(function (s) { ol.appendChild(el("li", { cls: "extra" }, [el("span", { cls: "idx", text: "" }), el("div", { cls: "spool" }, [el("code", { text: s.spool })]), el("span", { cls: "tag warn", text: "Not on DN" })])); });
+        c.appendChild(ol);
+        if (pending.length) c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Pending spools stay open on this DN — you or a colleague can scan them later. The spools you confirm now will be locked." }));
+      }
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Received by: " + me.name + " · " + me.email }));
+      $("rRemarks").placeholder = "e.g. one spool with damaged coating";
+    } else {
+      var h = draft.header, dl = el("dl", { cls: "kv" });
+      [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Spools loaded", String(items.length)]]
+        .forEach(function (r) { dl.appendChild(el("dt", { text: r[0] })); dl.appendChild(el("dd", { text: r[1] })); });
+      c.appendChild(el("h2", { text: "Delivery summary" })); c.appendChild(dl);
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Check the details, then tap Send delivery. The receiver gets an email with the list and a link to confirm receipt." }));
+      $("rRemarks").placeholder = "Anything the receiver should know";
+    }
+    $("rRemarksWrap").hidden = draft.mode !== "receive";
+    proofData = draft.proof || ""; $("proofPrev").hidden = !proofData; if (proofData) $("proofPrev").src = proofData;
+    show("vReview");
+    getGps();
+  }
+  function getGps() {
+    gps = null; $("gpsNote").textContent = "";
+    if (!navigator.geolocation) return;
+    $("gpsNote").textContent = "Recording location…";
+    navigator.geolocation.getCurrentPosition(function (p) {
+      gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+      $("gpsNote").textContent = "📍 Location recorded (±" + Math.round(p.coords.accuracy) + " m).";
+    }, function () { $("gpsNote").textContent = "Location not available — that's fine, you can still submit."; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  }
+  $("proofBtn").addEventListener("click", function () { $("proofInput").value = ""; $("proofInput").click(); });
+  $("proofInput").addEventListener("change", async function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    try {
+      var src = await loadImage(f), s = Math.min(1, 1280 / Math.max(src.width, src.height));
+      var c = document.createElement("canvas"); c.width = Math.round(src.width * s); c.height = Math.round(src.height * s);
+      c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
+      proofData = c.toDataURL("image/jpeg", 0.72); draft.proof = proofData; saveDraft();
+      $("proofPrev").src = proofData; $("proofPrev").hidden = false; $("proofBtn").textContent = "Retake photo";
+    } catch (err) { setStatus("bad", "Couldn't use that photo."); }
+  });
+
+  /* ---------- email sent from the person's own mailbox ---------- */
+  function mailHref(m, withList) {
+    var body = m.intro + (withList && m.lines && m.lines.length ? "\n\n" + m.listTitle + "\n" + m.lines.join("\n") :
+      (m.lines && m.lines.length ? "\n\n(" + m.lines.length + " spools – full list in the Excel file above.)" : "")) + "\n\n" + m.outro;
+    var enc = function (x) { return encodeURIComponent(x).replace(/%2C/g, ",").replace(/%40/g, "@"); };
+    return { text: "To: " + m.to + (m.cc ? "\nCc: " + m.cc : "") + "\nSubject: " + m.subject + "\n\n" + body,
+      href: "mailto:" + enc(m.to) + "?" + (m.cc ? "cc=" + enc(m.cc) + "&" : "") + "subject=" + encodeURIComponent(m.subject) + "&body=" + encodeURIComponent(body) };
+  }
+  function renderMail(m, toName, mode) {
+    var box = $("mailBox"); box.textContent = ""; box.hidden = true;
+    if (!m) return;
+    box.hidden = false;
+    if (m.error) { box.appendChild(el("p", { cls: "status warn", text: "Saved, but the email couldn't be prepared: " + m.error + ". Please inform " + (toName || "the other party") + " directly." })); return; }
+    var full = mailHref(m, true), mail = full.href.length > 1900 ? mailHref(m, false) : full;
+    box.appendChild(el("h3", { text: "Last step: send the email" }));
+    box.appendChild(el("p", { text: (mode === "receive" ? "Send the receipt confirmation to " : "Send the delivery note to ") + (toName || "them") +
+      " from your own email. It opens ready to send — just press Send." }));
+    var a = el("a", { cls: "sendmail", href: mail.href, target: "_blank", rel: "noopener" }, ["✉  Send email"]);
+    box.appendChild(a);
+    var links = el("div", { cls: "links" });
+    if (m.excelUrl) links.appendChild(el("a", { cls: "btn", href: m.excelUrl, target: "_blank", rel: "noopener", text: "Open Excel file" }));
+    var copy = el("button", { cls: "btn", type: "button", text: "Copy email text" });
+    copy.addEventListener("click", function () {
+      var ok = function () { setStatus("ok", "Email text copied. Paste it into a new email."); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(full.text).then(ok, function () { prompt("Copy this text:", full.text); });
+      else prompt("Copy this text:", full.text);
+    });
+    links.appendChild(copy);
+    box.appendChild(links);
+    box.appendChild(el("p", { cls: "who", text: "Nothing is sent until you press Send in your email app." }));
+  }
+
+  function submit() {
+    if (busy) return;
+    busy = true; var btn = $("nextBtn"), label = btn.textContent;
+    btn.disabled = true; btn.textContent = ""; btn.appendChild(el("span", { cls: "spin" })); btn.appendChild(document.createTextNode(" Sending…"));
+    var done = function () { busy = false; btn.disabled = false; btn.textContent = label; };
+    var call;
+    if (draft.mode === "receive") {
+      call = server("confirmReceipt", { dn: draft.delivery.dn, ref: draft.ref, receivedBy: me.name, receiverEmail: me.email, spools: draft.items, remarks: $("rRemarks").value.trim(), photo: proofData, gps: gps });
+    } else {
+      var h = draft.header;
+      call = server("createDelivery", { ref: draft.ref, project: h.project, from: h.from, to: h.to, purpose: h.purpose, senderName: me.name, senderEmail: me.email,
+        receiverName: h.receiverName, receiverEmail: h.receiverEmail, remarks: h.remarks, spools: draft.items, photo: proofData, gps: gps });
+    }
+    call.then(function (res) {
+      done();
+      var mode = draft.mode, n = draft.items.length, d = draft.delivery, h = draft.header;
+      draft = null; saveDraft(); proofData = ""; $("proofBtn").textContent = "Add photo of the spools / trailer"; $("rRemarks").value = "";
+      var box = $("doneBox"); box.textContent = "";
+      if (res && res.queued) {
+        box.appendChild(el("b", { text: "Saved on this phone" }));
+        box.appendChild(el("p", { cls: "dn", text: mode === "receive" ? (d && d.dn) : "Waiting for signal" }));
+        box.appendChild(el("p", { text: res.count + " spools · " + (mode === "receive" ? "receipt" : h.from + " → " + h.to) }));
+        box.appendChild(el("p", { cls: "who", text: "No signal right now. It will be sent to the register automatically as soon as this phone has signal — just open the app again. " +
+          (mode === "receive" ? "The Send email button" : "The delivery note number and the Send email button") + " will then appear in the Outbox on the home screen." }));
+        renderMail(null); clearStatus(); show("vDone"); return;
+      }
+      if (mode === "receive") {
+        if (res.duplicate) { box.appendChild(el("b", { text: "Already confirmed" })); box.appendChild(el("p", { cls: "dn", text: res.dn })); }
+        else {
+          var complete = !res.balance && !res.totalExtra;
+          box.appendChild(el("b", { text: complete ? "Delivery complete" : res.balance ? "Partially received" : "Received with differences" }));
+          box.appendChild(el("p", { cls: "dn", text: res.dn }));
+          box.appendChild(el("p", { text: res.received + " confirmed now · " + res.totalReceived + " of " + res.sent + " in total" +
+            (res.balance ? " · " + res.balance + " still pending" : "") + (res.totalExtra ? " · " + res.totalExtra + " not on DN" : "") }));
+          if (res.skipped) box.appendChild(el("p", { cls: "who", text: res.skipped + " scanned spool(s) were already confirmed earlier and were ignored." }));
+          if (res.balance) box.appendChild(el("p", { cls: "who", text: "Confirmed spools are now locked. The " + res.balance + " pending spool(s) can be scanned later on this same DN." }));
+
+        }
+      } else {
+        box.appendChild(el("b", { text: "Dispatched" }));
+        box.appendChild(el("p", { cls: "dn", text: res.dn }));
+        box.appendChild(el("p", { text: (res.count || n) + " spools · " + h.from + " → " + h.to }));
+
+      }
+      if (res.duplicate) box.appendChild(el("p", { cls: "who", text: "(This was already sent earlier — no duplicate was created.)" }));
+      renderMail(res.mail, mode === "receive" ? (d && d.senderName) : (h && h.receiverName), mode);
+      clearStatus(); show("vDone");
+    }).catch(function (e) {
+      done();
+      // One processing per delivery: if someone already confirmed it, this phone's list can't be used any more
+      if (draft && draft.mode === "receive" && /already received|is closed|already confirmed/i.test(String(e && e.message || e))) {
+        draft = null; saveDraft(); goHome(); setStatus("bad", friendly(e));
+        return;
+      }
+      setStatus("bad", friendly(e));
+    });
+  }
+
+  /* ---------- bottom bar ---------- */
+  $("backBtn").addEventListener("click", function () {
+    clearStatus();
+    if (view === "vDispatch" || view === "vReceiveList") goHome();
+    else if (view === "vScan") { if (draft.mode === "dispatch") startDispatch(); else goHome(); }
+    else if (view === "vReview") { show("vScan"); renderScan(); }
+  });
+  $("nextBtn").addEventListener("click", function () {
+    clearStatus();
+    if (view === "vDispatch") {
+      var h = readHeader(); if (!h) return;
+      if (draft && draft.mode === "dispatch") draft.header = h;
+      else draft = { mode: "dispatch", ref: uid(), header: h, items: [] };
+      saveDraft(); show("vScan"); renderScan();
+    } else if (view === "vScan") {
+      if (!draft.items.length) return setStatus("bad", "Scan at least one spool first.");
+      startReview();
+    } else if (view === "vReview") submit();
+  });
+
+  /* ---------- home buttons ---------- */
+  $("goDispatch").addEventListener("click", function () {
+    if (draft && draft.items && draft.items.length && draft.mode !== "dispatch" && !confirm("Discard the unfinished receipt for " + draft.delivery.dn + "?")) return;
+    if (!(draft && draft.mode === "dispatch")) draft = null;
+    startDispatch();
+  });
+  $("goReceive").addEventListener("click", startReceive);
+  $("draftResume").addEventListener("click", function () {
+    clearStatus();
+    if (draft && draft.mode === "receive") openDelivery(draft.delivery.dn); else { show("vScan"); renderScan(); }
+  });
+  $("draftDiscard").addEventListener("click", function () { if (confirm("Discard the scanned list?")) { draft = null; saveDraft(); goHome(); } });
+  $("doneHome").addEventListener("click", goHome);
+
+  /* ---------- start ---------- */
+  OFF.pill(); setTimeout(function () { OFF.sync(); }, 1500);
+  setStatus("warn", "Loading…");
+  server("getConfig").then(function (c) {
+    cfg = c; clearStatus(); fillPeople();
+    if (!me) startProfile();
+    else if (OPEN_DN) { var dn = OPEN_DN; OPEN_DN = ""; openDelivery(dn); }
+    else goHome();
+  }).catch(function (e) {
+    setStatus("bad", "Couldn't connect. " + friendly(e));
+    if (draft && draft.items && draft.items.length) { show("vScan"); renderScan(); }
+  });
+})();
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>
