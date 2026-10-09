@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "3";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "4";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -171,6 +171,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     <p class="who" style="margin:0">Signed in as <b id="meName"></b> · <button class="linkbtn" id="changeMe" type="button">change</button></p>
     <div id="pendingCard" class="card" hidden></div>
     <div id="outbox" class="card" hidden></div>
+    <div id="installCard" class="card" hidden></div>
     <div id="pushCard" class="card" hidden></div>
     <div id="draftCard" class="card" hidden>
       <h2>Unfinished</h2>
@@ -206,6 +207,11 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <div id="dRecvOther" class="row2" hidden>
         <label class="f">Receiver name <span class="req">*</span><input id="dRecvName"></label>
         <label class="f">Receiver email <span class="req">*</span><input id="dRecvEmail" type="email" inputmode="email"></label>
+      </div>
+      <label class="f">Second receiver (optional)<select id="dRecv2"></select></label>
+      <div id="dRecv2Other" class="row2" hidden>
+        <label class="f">Second receiver name <span class="req">*</span><input id="dRecv2Name"></label>
+        <label class="f">Second receiver email <span class="req">*</span><input id="dRecv2Email" type="email" inputmode="email"></label>
       </div>
       <label class="f">Remarks (optional)<textarea id="dRemarks" rows="2"></textarea></label>
     </div>
@@ -529,11 +535,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       box.textContent = ""; box.hidden = true;
       var saved = load(PUSH_KEY);
       if (!pushSupported()) {
-        if (isIos() && !standalone()) {
-          box.hidden = false;
-          box.appendChild(el("p", { cls: "who", style: "margin:0", text: "🔔 To get a notification when a delivery is sent to you: tap Share → Add to Home Screen, then open the app from the new icon." }));
-        }
-        return;
+        return; // iPhone in Safari: the Install card explains Add to Home Screen first
       }
       if (Notification.permission === "granted" && saved && saved.email === me.email) {
         // Already on: quietly keep the subscription registered (it can change)
@@ -559,10 +561,52 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       box.appendChild(b);
     }
 
+    /* Notifications on by default: the phone's one-time "Allow" question is shown straight after the
+       person enters their name (or on their first tap), and the phone is registered without any other step. */
+    function autoPush() {
+      if (!me || !pushSupported()) return;
+      var saved = load(PUSH_KEY);
+      if (Notification.permission === "granted") {
+        if (!saved || saved.email !== me.email) subscribe().then(pushCard).catch(function () {});
+        return;
+      }
+      if (Notification.permission !== "default" || load("sd-push-asked")) return;
+      store("sd-push-asked", Date.now());
+      Notification.requestPermission().then(function (perm) {
+        if (perm === "granted") return subscribe().then(function () { setStatus("ok", "Notifications are on. You'll be told when a delivery is sent to you."); pushCard(); });
+        pushCard();
+      }).catch(function () { pushCard(); });
+    }
+    document.addEventListener("click", function first() { document.removeEventListener("click", first, true); setTimeout(autoPush, 0); }, true);
+
+    /* Install: one tap puts the app on the home screen (Android shows its own confirm). */
+    var deferredInstall = null;
+    window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferredInstall = e; installCard(); });
+    window.addEventListener("appinstalled", function () { deferredInstall = null; store("sd-installed", 1); installCard(); });
+    function installCard() {
+      var box = $("installCard"); if (!box) return;
+      box.textContent = ""; box.hidden = true;
+      if (standalone() || load("sd-installed")) return;
+      if (deferredInstall) {
+        box.hidden = false;
+        box.appendChild(el("p", { style: "margin:0 0 8px", text: "📲 Install the app on this phone — one tap puts Spool Delivery on your home screen. It also works without signal." }));
+        var b = el("button", { cls: "btn primary", type: "button", text: "Install app" });
+        b.addEventListener("click", function () {
+          var ev = deferredInstall; if (!ev) return;
+          ev.prompt();
+          ev.userChoice.then(function (c) { if (c && c.outcome === "accepted") { store("sd-installed", 1); deferredInstall = null; } installCard(); });
+        });
+        box.appendChild(b);
+      } else if (isIos()) {
+        box.hidden = false;
+        box.appendChild(el("p", { cls: "who", style: "margin:0", text: "📲 Install on iPhone: tap the Share button ⬆︎ at the bottom of Safari, then “Add to Home Screen”. Open the app from the new icon to get notifications." }));
+      }
+    }
+
     window.addEventListener("online", function () { pill(); sync(); });
     window.addEventListener("offline", pill);
     setInterval(function () { if (queue().some(function (i) { return i.state === "waiting"; })) sync(); }, 30000);
-    return { call: call, sync: sync, renderOutbox: renderOutbox, pill: pill, pushCard: pushCard };
+    return { call: call, sync: sync, renderOutbox: renderOutbox, pill: pill, pushCard: pushCard, autoPush: autoPush, installCard: installCard };
   })();
 
   function isEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim()); }
@@ -606,7 +650,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
   function goHome() {
     clearStatus();
-    OFF.renderOutbox(); OFF.pill(); OFF.pushCard();
+    OFF.renderOutbox(); OFF.pill(); OFF.installCard(); OFF.pushCard();
     loadPending();
     $("meName").textContent = me.name;
     $("draftCard").hidden = !(draft && draft.items && draft.items.length);
@@ -623,7 +667,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     var mine = me.email.toLowerCase();
     server("listInTransit", "").then(function (list) {
       var box = $("pendingCard"); box.textContent = "";
-      var todo = (list || []).filter(function (t) { return String(t.receiverEmail || "").toLowerCase() === mine; });
+      var todo = (list || []).filter(function (t) { return String(t.receiverEmail || "").toLowerCase() === mine || String(t.receiver2Email || "").toLowerCase() === mine; });
       try { if (navigator.setAppBadge) { if (todo.length) navigator.setAppBadge(todo.length); else navigator.clearAppBadge(); } } catch (e) {}
       box.hidden = !todo.length;
       if (!todo.length) return;
@@ -655,6 +699,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!n) return setStatus("bad", "Enter your name.");
     if (!isEmail(e)) return setStatus("bad", "Enter a valid email.");
     me = { name: n, email: e }; store(PROFILE_KEY, me);
+    OFF.autoPush();
     if (OPEN_DN) { var dn = OPEN_DN; OPEN_DN = ""; openDelivery(dn); } else goHome();
   });
   $("changeMe").addEventListener("click", startProfile);
@@ -667,14 +712,17 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (items.indexOf(cur) >= 0) sel.value = cur;
   }
   function fillPeople() {
-    var sel = $("dRecv"); sel.textContent = "";
-    sel.appendChild(el("option", { value: "", text: "Select receiver…" }));
-    cfg.people.forEach(function (p, i) { if (p.email) sel.appendChild(el("option", { value: String(i), text: p.name })); });
-    sel.appendChild(el("option", { value: "other", text: "Someone else (type name & email)" }));
+    [["dRecv", "Select receiver…"], ["dRecv2", "None"]].forEach(function (x) {
+      var sel = $(x[0]); sel.textContent = "";
+      sel.appendChild(el("option", { value: "", text: x[1] }));
+      cfg.people.forEach(function (p, i) { if (p.email) sel.appendChild(el("option", { value: String(i), text: p.name })); });
+      sel.appendChild(el("option", { value: "other", text: "Someone else (type name & email)" }));
+    });
     var dl = $("peopleNames"); dl.textContent = "";
     cfg.people.forEach(function (p) { dl.appendChild(el("option", { value: p.name })); });
   }
   $("dRecv").addEventListener("change", function () { $("dRecvOther").hidden = $("dRecv").value !== "other"; });
+  $("dRecv2").addEventListener("change", function () { $("dRecv2Other").hidden = $("dRecv2").value !== "other"; });
 
   function startDispatch() {
     clearStatus();
@@ -689,8 +737,15 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("dRecv").value = idx >= 0 ? String(idx) : "other";
       if (idx < 0) { $("dRecvName").value = h.receiverName; $("dRecvEmail").value = h.receiverEmail; }
       $("dRecvOther").hidden = idx >= 0;
+      if (h.receiver2Email) {
+        var i2 = cfg.people.findIndex(function (p) { return p.name === h.receiver2Name && p.email === h.receiver2Email; });
+        $("dRecv2").value = i2 >= 0 ? String(i2) : "other";
+        if (i2 < 0) { $("dRecv2Name").value = h.receiver2Name; $("dRecv2Email").value = h.receiver2Email; }
+        $("dRecv2Other").hidden = i2 >= 0;
+      } else { $("dRecv2").value = ""; $("dRecv2Other").hidden = true; }
     } else {
       $("dRemarks").value = ""; $("dRecv").value = ""; $("dRecvOther").hidden = true; $("dRecvName").value = ""; $("dRecvEmail").value = "";
+      $("dRecv2").value = ""; $("dRecv2Other").hidden = true; $("dRecv2Name").value = ""; $("dRecv2Email").value = "";
     }
     show("vDispatch");
   }
@@ -704,6 +759,15 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!h.receiverName) miss.push("Receiver name");
     if (miss.length) { setStatus("bad", "Please fill: " + miss.join(", ")); return null; }
     if (!isEmail(h.receiverEmail)) { setStatus("bad", "Receiver email is not valid."); return null; }
+    var r2 = $("dRecv2").value;
+    h.receiver2Name = ""; h.receiver2Email = "";
+    if (r2 === "other") { h.receiver2Name = $("dRecv2Name").value.trim(); h.receiver2Email = $("dRecv2Email").value.trim(); }
+    else if (r2 !== "") { h.receiver2Name = cfg.people[+r2].name; h.receiver2Email = cfg.people[+r2].email; }
+    if (r2 !== "") {
+      if (!h.receiver2Name) { setStatus("bad", "Enter the second receiver's name, or choose None."); return null; }
+      if (!isEmail(h.receiver2Email)) { setStatus("bad", "Second receiver email is not valid."); return null; }
+      if (h.receiver2Email.toLowerCase() === h.receiverEmail.toLowerCase()) { setStatus("bad", "The second receiver is the same as the first. Choose someone else or None."); return null; }
+    }
     if (h.from === h.to) { setStatus("bad", "From and To can't be the same location."); return null; }
     return h;
   }
@@ -781,7 +845,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
     } else {
       var h = draft.header;
-      rows = [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivering to", h.receiverName]];
+      rows = [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivering to", h.receiverName + (h.receiver2Name ? " & " + h.receiver2Name : "")]];
     }
     var dl = el("dl", { cls: "kv" });
     rows.forEach(function (r) { dl.appendChild(el("dt", { text: r[0] })); dl.appendChild(el("dd", { text: r[1] })); });
@@ -948,7 +1012,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("rRemarks").placeholder = "e.g. one spool with damaged coating";
     } else {
       var h = draft.header, dl = el("dl", { cls: "kv" });
-      [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Spools loaded", String(items.length)]]
+      [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Second receiver", h.receiver2Name ? h.receiver2Name + " · " + h.receiver2Email : "—"], ["Spools loaded", String(items.length)]]
         .forEach(function (r) { dl.appendChild(el("dt", { text: r[0] })); dl.appendChild(el("dd", { text: r[1] })); });
       c.appendChild(el("h2", { text: "Delivery summary" })); c.appendChild(dl);
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Check the details, then tap Send delivery. The receiver gets an email with the list and a link to confirm receipt." }));
@@ -1023,7 +1087,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     } else {
       var h = draft.header;
       call = server("createDelivery", { ref: draft.ref, project: h.project, from: h.from, to: h.to, purpose: h.purpose, senderName: me.name, senderEmail: me.email,
-        receiverName: h.receiverName, receiverEmail: h.receiverEmail, remarks: h.remarks, spools: draft.items, photo: proofData, gps: gps });
+        receiverName: h.receiverName, receiverEmail: h.receiverEmail, receiver2Name: h.receiver2Name || "", receiver2Email: h.receiver2Email || "", remarks: h.remarks, spools: draft.items, photo: proofData, gps: gps });
     }
     call.then(function (res) {
       done();
@@ -1057,7 +1121,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
       }
       if (res.duplicate) box.appendChild(el("p", { cls: "who", text: "(This was already sent earlier — no duplicate was created.)" }));
-      renderMail(res.mail, mode === "receive" ? (d && d.senderName) : (h && h.receiverName), mode);
+      renderMail(res.mail, mode === "receive" ? (d && d.senderName) : (h && (h.receiverName + (h.receiver2Name ? " and " + h.receiver2Name : ""))), mode);
       clearStatus(); show("vDone");
     }).catch(function (e) {
       done();
