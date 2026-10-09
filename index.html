@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "2";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "3";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -132,6 +132,10 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 .obx b { font-size:15px; } .obx.waiting b { color:#a35c00; } .obx.sent b { color:#1f7a4d; } .obx.error b { color:var(--bad); }
 .obx small { color:var(--muted); } .obx small.err { color:var(--bad); }
 .obx .links { display:flex; gap:8px; margin-top:6px; } .obx .links > * { flex:1; text-align:center; text-decoration:none; }
+#pendingCard { border:2px solid var(--accent); }
+#pendingCard h2 { margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+#pendingCard h2 .badge { background:var(--bad); color:#fff; border-radius:999px; font-size:13px; min-width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; padding:0 6px; }
+#pendingCard .trip { margin:8px 0 0; width:100%; }
 @media (prefers-reduced-motion: reduce) { ol.log li.fresh { animation:none; } .spin { animation:none; } }
 </style>
 </head>
@@ -165,7 +169,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   <!-- 2. Home -->
   <section id="vHome" hidden>
     <p class="who" style="margin:0">Signed in as <b id="meName"></b> · <button class="linkbtn" id="changeMe" type="button">change</button></p>
+    <div id="pendingCard" class="card" hidden></div>
     <div id="outbox" class="card" hidden></div>
+    <div id="pushCard" class="card" hidden></div>
     <div id="draftCard" class="card" hidden>
       <h2>Unfinished</h2>
       <p id="draftText" style="margin:0"></p>
@@ -492,10 +498,71 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       }
     }
 
+    /* ---------- push notifications ---------- */
+    function b64ToBytes(b64) {
+      var pad = "=".repeat((4 - b64.length % 4) % 4), raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+      var out = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i); return out;
+    }
+    function rememberMe() {
+      // The notification handler (which runs while the app is closed) needs to know whose deliveries to look up
+      if (!me || !window.caches) return;
+      caches.open("sd-meta").then(function (c) { return c.put("me.json", new Response(JSON.stringify({ email: me.email, api: API }), { headers: { "Content-Type": "application/json" } })); }).catch(function () {});
+    }
+    var PUSH_KEY = "sd-push-v1";
+    function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+    function isIos() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+    function standalone() { return (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true; }
+    function subscribe() {
+      return navigator.serviceWorker.ready.then(function (reg) {
+        return post("getPushKey", [], 15000).then(function (key) {
+          return reg.pushManager.getSubscription().then(function (old) {
+            return old || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+          });
+        });
+      }).then(function (sub) {
+        return post("savePushSub", [me.email, sub.toJSON()], 15000).then(function () { store(PUSH_KEY, { email: me.email, at: Date.now() }); });
+      });
+    }
+    function pushCard() {
+      rememberMe();
+      var box = $("pushCard"); if (!box || !me) return;
+      box.textContent = ""; box.hidden = true;
+      var saved = load(PUSH_KEY);
+      if (!pushSupported()) {
+        if (isIos() && !standalone()) {
+          box.hidden = false;
+          box.appendChild(el("p", { cls: "who", style: "margin:0", text: "🔔 To get a notification when a delivery is sent to you: tap Share → Add to Home Screen, then open the app from the new icon." }));
+        }
+        return;
+      }
+      if (Notification.permission === "granted" && saved && saved.email === me.email) {
+        // Already on: quietly keep the subscription registered (it can change)
+        if (navigator.onLine !== false && Date.now() - (saved.at || 0) > 864e5) subscribe().catch(function () {});
+        return;
+      }
+      box.hidden = false;
+      if (Notification.permission === "denied") {
+        box.appendChild(el("p", { cls: "who", style: "margin:0", text: "🔔 Notifications are blocked for this app. To get them, allow notifications for this site in the phone or browser settings." }));
+        return;
+      }
+      box.appendChild(el("p", { style: "margin:0 0 8px", text: "🔔 Get a notification on this phone when a delivery is sent to you." }));
+      var b = el("button", { cls: "btn primary", type: "button", text: "Turn on notifications" });
+      b.addEventListener("click", function () {
+        if (navigator.onLine === false) return setStatus("warn", "Turn notifications on where there is signal.");
+        b.disabled = true; b.textContent = "Turning on…";
+        Notification.requestPermission().then(function (perm) {
+          if (perm !== "granted") throw new Error(perm === "denied" ? "Notifications were blocked. Allow them in the phone settings to turn them on." : "Notifications were not allowed.");
+          return subscribe();
+        }).then(function () { setStatus("ok", "Notifications are on. You'll be told when a delivery is sent to " + me.email + "."); pushCard(); })
+          .catch(function (e) { b.disabled = false; b.textContent = "Turn on notifications"; setStatus("bad", friendly(e)); });
+      });
+      box.appendChild(b);
+    }
+
     window.addEventListener("online", function () { pill(); sync(); });
     window.addEventListener("offline", pill);
     setInterval(function () { if (queue().some(function (i) { return i.state === "waiting"; })) sync(); }, 30000);
-    return { call: call, sync: sync, renderOutbox: renderOutbox, pill: pill };
+    return { call: call, sync: sync, renderOutbox: renderOutbox, pill: pill, pushCard: pushCard };
   })();
 
   function isEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim()); }
@@ -539,7 +606,8 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
   function goHome() {
     clearStatus();
-    OFF.renderOutbox(); OFF.pill();
+    OFF.renderOutbox(); OFF.pill(); OFF.pushCard();
+    loadPending();
     $("meName").textContent = me.name;
     $("draftCard").hidden = !(draft && draft.items && draft.items.length);
     if (draft && draft.items && draft.items.length) {
@@ -547,6 +615,30 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         " — " + draft.items.length + " spool" + (draft.items.length === 1 ? "" : "s") + " scanned.";
     }
     show("vHome");
+  }
+
+  /* ---------- deliveries waiting for this person ---------- */
+  function loadPending() {
+    if (!me || !me.email) return;
+    var mine = me.email.toLowerCase();
+    server("listInTransit", "").then(function (list) {
+      var box = $("pendingCard"); box.textContent = "";
+      var todo = (list || []).filter(function (t) { return String(t.receiverEmail || "").toLowerCase() === mine; });
+      try { if (navigator.setAppBadge) { if (todo.length) navigator.setAppBadge(todo.length); else navigator.clearAppBadge(); } } catch (e) {}
+      box.hidden = !todo.length;
+      if (!todo.length) return;
+      box.appendChild(el("h2", {}, ["Pending for you", el("span", { cls: "badge", text: String(todo.length) })]));
+      box.appendChild(el("p", { cls: "who", style: "margin:0", text: todo.length === 1 ? "A delivery has been sent to you. Receive it when it arrives." : todo.length + " deliveries have been sent to you. Receive each one when it arrives." }));
+      todo.forEach(function (t) {
+        var b = el("button", { cls: "card trip", type: "button" }, [
+          el("div", { cls: "t1" }, [el("span", { cls: "dn", text: t.dn }), el("span", { cls: "tag warn", text: t.received ? t.received + "/" + t.count + " received" : t.count + " spools" })]),
+          el("div", { text: t.from + " → " + t.to }),
+          el("small", { text: t.purpose + " · from " + t.senderName + " · " + t.dispatchedAt })
+        ]);
+        b.addEventListener("click", function () { openDelivery(t.dn); });
+        box.appendChild(b);
+      });
+    }).catch(function () {});
   }
 
   /* ---------- profile ---------- */
