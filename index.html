@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "4";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "5";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -633,6 +633,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   /* ---------- views ---------- */
   function show(v) {
     view = v;
+    if (v !== "vReview") stopGps();
     ["vProfile", "vHome", "vDispatch", "vReceiveList", "vScan", "vReview", "vDone"].forEach(function (id) { $(id).hidden = id !== v; });
     var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", draft && draft.mode === "receive" ? "Review receipt" : "Confirm and Send"],
       vReview: ["Keep scanning", draft && draft.mode === "receive" ? "Confirm receipt" : "Send delivery"], vReceiveList: ["Back", null] }[v];
@@ -1023,14 +1024,34 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     show("vReview");
     getGps();
   }
+  // Best GPS fix: fresh readings only, keep the most accurate one for up to 12 s (stops early at 10 m or better)
+  var gpsWatch = null, gpsTimer = null;
+  function stopGps() {
+    if (gpsWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatch);
+    gpsWatch = null; clearTimeout(gpsTimer);
+  }
+  function gpsText() {
+    if (!gps) return;
+    var a = Math.round(gps.acc);
+    $("gpsNote").textContent = a > 50
+      ? "📍 Weak GPS signal (±" + a + " m) — step into the open for a better fix. You can still submit."
+      : "📍 Location recorded (±" + a + " m).";
+  }
   function getGps() {
-    gps = null; $("gpsNote").textContent = "";
+    stopGps(); gps = null; $("gpsNote").textContent = "";
     if (!navigator.geolocation) return;
     $("gpsNote").textContent = "Recording location…";
-    navigator.geolocation.getCurrentPosition(function (p) {
-      gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
-      $("gpsNote").textContent = "📍 Location recorded (±" + Math.round(p.coords.accuracy) + " m).";
-    }, function () { $("gpsNote").textContent = "Location not available — that's fine, you can still submit."; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    try {
+      gpsWatch = navigator.geolocation.watchPosition(function (p) {
+        if (gpsWatch == null) return; // already stopped
+        if (!gps || p.coords.accuracy < gps.acc) { gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }; gpsText(); }
+        if (gps.acc <= 10) stopGps();
+      }, function () {
+        if (!gps) $("gpsNote").textContent = "Location not available — that's fine, you can still submit.";
+        stopGps();
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      gpsTimer = setTimeout(function () { stopGps(); if (!gps) $("gpsNote").textContent = "Location not available — that's fine, you can still submit."; }, 12000);
+    } catch (e) { $("gpsNote").textContent = ""; }
   }
   $("proofBtn").addEventListener("click", function () { $("proofInput").value = ""; $("proofInput").click(); });
   $("proofInput").addEventListener("change", async function (e) {
