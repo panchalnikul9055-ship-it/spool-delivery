@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spool Trail</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Layout: black app bar, spool summary, full-width satellite map, trip-grouped step list below (side-by-side on wide screens) */
+:root {
+  --bar:#000000; --ink:#1c1c1b; --muted:#5d6670; --bg:#f3f6fb; --panel:#ffffff; --line:#d6dee9; --soft:#e7eef9;
+  --blue:#30a9e1; --deep:#1b7fb0; --disp:#1c1c1b; --recv:#1b7fb0; --relo:#e8743b; --ok:#1f7a4d; --warn:#a35c00;
+  --body:"Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; --mono:Consolas, "Roboto Mono", "DejaVu Sans Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ink:#e8edf3; --muted:#9aa7b4; --bg:#0f1418; --panel:#171e24; --line:#2a3540; --soft:#1d2830; --disp:#e8edf3; color-scheme:dark; } }
+:root[data-theme="dark"] { --ink:#e8edf3; --muted:#9aa7b4; --bg:#0f1418; --panel:#171e24; --line:#2a3540; --soft:#1d2830; --disp:#e8edf3; color-scheme:dark; }
+* { box-sizing:border-box; }
+html, body { margin:0; }
+body { background:var(--bg); color:var(--ink); font:15px/1.45 var(--body); }
+.bar { background:var(--bar); color:#fff; display:flex; align-items:center; gap:12px; padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top, 0px)); }
+.bar b { font-size:17px; } .bar .sp { margin-left:auto; font:600 12px var(--body); letter-spacing:.08em; text-transform:uppercase; color:#cfe9f7; }
+.preview { background:#fdf0d9; color:#7a4500; font-size:13px; padding:8px 16px; }
+.wrap { padding-inline:16px; padding-block:14px 28px; display:grid; gap:14px; max-width:1280px; margin:0 auto; }
+.head { display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px 18px; }
+.head h1 { margin:0; font:700 24px/1.15 var(--mono); letter-spacing:.01em; word-break:break-all; }
+.head .k { font:700 11px var(--body); letter-spacing:.12em; text-transform:uppercase; color:var(--deep); }
+.chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chip { border-radius:999px; padding:4px 12px; font-size:13px; font-weight:600; background:var(--soft); color:var(--ink); }
+.chip.ok { background:#dff3e8; color:#1f7a4d; }
+.main { display:grid; gap:14px; grid-template-columns:1fr; }
+@media (min-width:980px) { .main { grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr); align-items:start; } }
+.mapbox { position:relative; border-radius:14px; overflow:hidden; border:1px solid var(--line); background:#1a2228; }
+#map { height:62vh; min-height:360px; }
+.legend { position:absolute; left:10px; bottom:10px; z-index:500; background:rgba(255,255,255,.94); color:#1c1c1b; border-radius:10px; padding:8px 10px; font-size:12px; display:grid; gap:4px; box-shadow:0 4px 14px rgba(0,0,0,.25); }
+.legend span { display:flex; align-items:center; gap:8px; }
+.legend i { width:14px; height:14px; border-radius:50%; display:inline-block; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.3); }
+.legend .ln { width:22px; height:0; border-top:3px solid #fff; border-radius:0; box-shadow:none; }
+.legend .ln.dash { border-top:3px dashed #ffffff; filter:drop-shadow(0 0 1px #000); }
+.tools { position:absolute; right:10px; top:10px; z-index:500; display:flex; gap:6px; }
+.tools button { font:600 13px var(--body); border:0; border-radius:8px; padding:8px 12px; background:#fff; color:#1c1c1b; box-shadow:0 4px 14px rgba(0,0,0,.25); cursor:pointer; }
+.tools button[aria-pressed="true"] { background:var(--deep); color:#fff; }
+.list { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+.trip { border-top:1px solid var(--line); } .trip:first-child { border-top:0; }
+.trip h3 { margin:0; padding:12px 14px 6px; font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; gap:8px; flex-wrap:wrap; }
+.trip h3 b { color:var(--ink); letter-spacing:0; text-transform:none; font-size:14px; }
+.trip.cur h3::after { content:"Current stay"; margin-left:auto; background:var(--relo); color:#fff; border-radius:999px; padding:1px 10px; font-size:11px; letter-spacing:.04em; }
+.step { display:grid; grid-template-columns:34px 1fr; gap:10px; padding:10px 14px; cursor:pointer; border-left:4px solid transparent; }
+.step:hover, .step.on { background:var(--soft); }
+.step.on { border-left-color:var(--blue); }
+.num { width:30px; height:30px; border-radius:50%; color:#fff; font:700 13px var(--body); display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 0 0 1px var(--line); }
+.n-disp { background:var(--disp); color:var(--bg); } .n-recv { background:var(--recv); } .n-relo { background:var(--relo); }
+.step .t { font-weight:700; } .step .m { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; }
+.step .acc { font-variant-numeric:tabular-nums; }
+.step a { display:inline-block; margin-top:4px; font-size:13px; font-weight:600; color:var(--deep); text-decoration:none; }
+.step a:hover { text-decoration:underline; }
+.foot { color:var(--muted); font-size:12px; }
+.pin { width:30px; height:30px; border-radius:50%; color:#fff; font:700 13px var(--body); display:flex; align-items:center; justify-content:center; border:2px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.5); }
+.pin.disp { background:#1c1c1b; } .pin.recv { background:#1b7fb0; } .pin.relo { background:#e8743b; }
+.pin.on { transform:scale(1.25); box-shadow:0 0 0 5px rgba(48,169,225,.55), 0 2px 8px rgba(0,0,0,.5); }
+.arrow { width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:13px solid #fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+.leaflet-popup-content { font:13px/1.4 var(--body); margin:10px 12px; }
+.leaflet-popup-content b { font-size:14px; }
+.leaflet-popup-content a { font-weight:600; color:#1b7fb0; }
+.state { padding:40px 16px; text-align:center; color:var(--muted); }
+.state.err { color:#b3261e; }
+.n-miss { background:#9aa5ab; } .nogps { color:var(--muted); font-size:13px; font-style:italic; }
+.maptip { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:400; color:#fff; font-weight:600; text-shadow:0 1px 3px #000; pointer-events:none; text-align:center; padding:16px; }
+.upd { color:var(--muted); font-size:12px; margin-left:auto; align-self:center; }
+.tools button:disabled { opacity:.5; cursor:not-allowed; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="bar"><b>Spool Trail</b><span class="sp">Spool Delivery Tracking</span></div>
+<div class="wrap">
+  <div class="head">
+    <div><div class="k">Spool No</div><h1 id="spoolNo"></h1></div>
+    <div class="chips" id="chips"></div>
+    <span class="upd" id="upd"></span>
+  </div>
+  <div class="state" id="state">Loading the spool's history…</div>
+  <div class="main" id="main" hidden>
+    <div class="mapbox">
+      <div id="map" role="img" aria-label="Map of the spool's recorded positions"></div>
+      <div class="maptip" id="maptip" hidden></div>
+      <div class="tools">
+        <button type="button" id="btnAll" aria-pressed="true">Full history</button>
+        <button type="button" id="btnStay" aria-pressed="false">Current stay</button>
+      </div>
+      <div class="legend">
+        <span><i style="background:#1c1c1b"></i>Dispatched</span>
+        <span><i style="background:#1b7fb0"></i>Received</span>
+        <span><i style="background:#e8743b"></i>Relocated in yard</span>
+        <span><i class="ln dash"></i>Delivery trip</span>
+        <span><i class="ln"></i>Move in yard</span>
+      </div>
+    </div>
+    <div>
+      <div class="list" id="list"></div>
+      <p class="foot" id="foot"></p>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  var API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec";
+  var $ = function (id) { return document.getElementById(id); };
+  var LABEL = { disp: "Dispatched", recv: "Received", relo: "Relocated", miss: "Missing" };
+  var COLOR = { disp: "#1c1c1b", recv: "#1b7fb0", relo: "#e8743b", miss: "#9aa5ab" };
+  function gmaps(s) { return "https://www.google.com/maps/search/?api=1&query=" + s.lat + "%2C" + s.lng; }
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function fail(msg) { var st = $("state"); st.className = "state err"; st.textContent = msg; }
+
+  var spool = new URLSearchParams(location.search).get("s") || "";
+  if (!spool) { fail("No spool number in the link. Open the Spool Trail from the Movements tab."); return; }
+  $("spoolNo").textContent = spool;
+  document.title = "Spool Trail · " + spool;
+  if (window.TRAIL) render(window.TRAIL);
+  else fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ fn: "getTrail", args: [spool] }), redirect: "follow" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (j) { if (j.error) throw new Error(j.error); render(j.ok); })
+    .catch(function (e) { fail(/HTTP|Failed to fetch|NetworkError|Load failed/i.test(e.message) ? "Couldn't reach the register. Check the signal and open the link again." : e.message); });
+
+  function render(T) {
+    $("state").hidden = true; $("main").hidden = false;
+    $("spoolNo").textContent = T.spool;
+    if (T.at) $("upd").textContent = "Updated " + String(T.at).slice(0, 16);
+    var chips = $("chips"), nRelo = T.steps.filter(function (s) { return s.kind === "relo"; }).length;
+    [["Project " + T.project, ""], [T.location, ""], [T.status, /^Received/.test(T.status) ? "ok" : ""], [nRelo + (nRelo === 1 ? " relocation" : " relocations"), ""]]
+      .forEach(function (c) { if (c[0]) chips.appendChild(el("span", "chip " + c[1], esc(c[0]))); });
+
+    // the current stay = the last receipt and every relocation after it (none while the spool is on the way)
+    var lastRecv = -1, lastDisp = -1;
+    T.steps.forEach(function (s, i) { if (s.kind === "recv") lastRecv = i; if (s.kind === "disp") lastDisp = i; });
+    var stayFrom = lastRecv > lastDisp ? lastRecv : -1;
+    var pos = function (s) { return s.lat != null && s.lng != null; };
+
+    var map = L.map("map", { zoomControl: true, attributionControl: true }).setView([24.4, 54.5], 11);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20, maxNativeZoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" }).addTo(map);
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20, maxNativeZoom: 19, opacity: .85 }).addTo(map);
+
+    var markers = {}, rows = [];
+    T.steps.forEach(function (s, i) {
+      if (!pos(s)) return;
+      var n = i + 1;
+      if (s.acc) L.circle([s.lat, s.lng], { radius: s.acc, color: COLOR[s.kind], weight: 1, opacity: .6, fillOpacity: .12 }).addTo(map);
+      var m = L.marker([s.lat, s.lng], { icon: L.divIcon({ className: "", html: '<div class="pin ' + s.kind + '">' + n + "</div>", iconSize: [30, 30], iconAnchor: [15, 15] }), zIndexOffset: 100 + i, riseOnHover: true }).addTo(map);
+      m.bindPopup("<b>" + n + " · " + LABEL[s.kind] + (s.extra ? " (not on DN)" : "") + "</b><br>" + esc(s.place) + (s.dn ? " · " + esc(s.dn) : "") + "<br>" + esc(s.at) + " · " + esc(s.by) +
+        (s.acc ? "<br>Accuracy ±" + s.acc + " m" : "") + "<br><a href=\"" + gmaps(s) + "\" target=\"_blank\" rel=\"noopener\">Open in Google Maps ↗</a>");
+      m.on("click", function () { select(i, false); });
+      markers[i] = m;
+    });
+    // lines join the recorded positions in time order: dashed for a delivery trip, solid for a move inside a yard
+    var P = T.steps.map(function (s, i) { return { s: s, i: i }; }).filter(function (x) { return pos(x.s); });
+    for (var k = 1; k < P.length; k++) {
+      var a = P[k - 1].s, b = P[k].s, yard = b.kind === "relo" || (b.kind === "disp" && a.kind !== "disp" && a.trip !== b.trip);
+      L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: "#000", weight: yard ? 6 : 5, opacity: .35, dashArray: yard ? null : "10 8" }).addTo(map);
+      L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: yard ? "#ffffff" : "#cfe9f7", weight: 3, opacity: .95, dashArray: yard ? null : "10 8" }).addTo(map);
+      var f = .58, lat = a.lat + (b.lat - a.lat) * f, lng = a.lng + (b.lng - a.lng) * f;
+      var ang = Math.atan2((b.lng - a.lng) * Math.cos(a.lat * Math.PI / 180), b.lat - a.lat) * 180 / Math.PI;
+      if (Math.abs(b.lat - a.lat) + Math.abs(b.lng - a.lng) > 1e-6)
+        L.marker([lat, lng], { interactive: false, icon: L.divIcon({ className: "", html: '<div class="arrow" style="transform:rotate(' + ang + 'deg)"></div>', iconSize: [14, 13], iconAnchor: [7, 6] }) }).addTo(map);
+    }
+    if (!P.length) { $("maptip").hidden = false; $("maptip").textContent = "No positions recorded for this spool yet."; }
+
+    // step list grouped by trip
+    var list = $("list"), byTrip = {}, curTrip = stayFrom >= 0 ? T.steps[stayFrom].trip : -1;
+    T.steps.forEach(function (s, i) {
+      if (!byTrip[s.trip]) {
+        var d = T.steps.filter(function (x) { return x.trip === s.trip && x.kind === "disp"; })[0];
+        var sec = el("section", "trip" + (s.trip === curTrip ? " cur" : ""));
+        sec.appendChild(el("h3", "", "Trip " + s.trip + " · <b>" + esc(s.dn) + "</b> " + (d ? esc(d.place) + " → " + esc(d.to) : "→ " + esc(s.to))));
+        list.appendChild(sec); byTrip[s.trip] = sec;
+      }
+      var row = el("div", "step");
+      row.innerHTML = '<div class="num n-' + s.kind + '">' + (i + 1) + '</div><div><div class="t">' + LABEL[s.kind] + (s.extra ? " (not on DN)" : "") + " · " + esc(s.place) + '</div>' +
+        '<div class="m">' + esc(s.at) + (s.by ? " · " + esc(s.by) : "") + (pos(s) && s.acc ? ' · <span class="acc">±' + s.acc + " m</span>" : "") + "</div>" +
+        (pos(s) ? '<a href="' + gmaps(s) + '" target="_blank" rel="noopener">Open in Google Maps ↗</a>' : '<div class="nogps">' + (s.kind === "miss" ? "Not found on this delivery" : "No position recorded") + "</div>") + "</div>";
+      row.addEventListener("click", function (e) { if (e.target.tagName !== "A") select(i, true); });
+      byTrip[s.trip].appendChild(row); rows[i] = row;
+    });
+    $("foot").textContent = P.length + " recorded position" + (P.length === 1 ? "" : "s") + " · tap a step or pin to find it on the map. Circles show each reading's accuracy.";
+
+    function select(i, fly) {
+      rows.forEach(function (r, k) { if (r) r.classList.toggle("on", k === i); });
+      Object.keys(markers).forEach(function (k) { var p = markers[k].getElement() && markers[k].getElement().firstChild; if (p) p.classList.toggle("on", +k === i); });
+      if (fly && markers[i]) { map.flyTo(markers[i].getLatLng(), Math.max(map.getZoom(), 18), { duration: .6 }); markers[i].openPopup(); }
+      if (rows[i]) rows[i].scrollIntoView({ block: "nearest" });
+    }
+    function fit(from) {
+      var pts = T.steps.slice(from).filter(pos).map(function (s) { return [s.lat, s.lng]; });
+      if (!pts.length) return;
+      if (pts.length === 1) map.setView(pts[0], 18); else map.fitBounds(pts, { padding: [40, 40], maxZoom: 19 });
+    }
+    if (stayFrom < 0) { $("btnStay").disabled = true; $("btnStay").title = "The spool is on the way – no current stay yet"; }
+    $("btnAll").addEventListener("click", function () { fit(0); this.setAttribute("aria-pressed", "true"); $("btnStay").setAttribute("aria-pressed", "false"); });
+    $("btnStay").addEventListener("click", function () { if (stayFrom < 0) return; fit(stayFrom); this.setAttribute("aria-pressed", "true"); $("btnAll").setAttribute("aria-pressed", "false"); });
+    fit(0);
+  }
+})();
+</script>
+</body>
+</html>

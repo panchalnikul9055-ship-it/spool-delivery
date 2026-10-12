@@ -1,7 +1,7 @@
 /* Spool Delivery Tracking – offline cache. The app opens from this cache when there is no signal,
    and quietly refreshes itself from the website whenever there is. */
-var CACHE = "sd-app-5";
-var SHELL = ["./", "index.html", "jsQR.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+var CACHE = "sd-app-6";
+var SHELL = ["./", "index.html", "trail.html", "jsQR.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));
@@ -16,7 +16,8 @@ self.addEventListener("activate", function (e) {
 self.addEventListener("fetch", function (e) {
   var req = e.request, url = new URL(req.url);
   if (req.method !== "GET" || url.origin !== self.location.origin) return; // server calls go straight to the network
-  var key = req.mode === "navigate" ? "index.html" : req;
+  var trail = /\/trail\.html$/.test(url.pathname); // the Spool Trail map is its own page
+  var key = trail ? "trail.html" : req.mode === "navigate" ? "index.html" : req;
   e.respondWith(caches.open(CACHE).then(function (c) {
     return c.match(key, { ignoreSearch: true }).then(function (hit) {
       var fresh = fetch(req).then(function (r) {

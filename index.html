@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "5";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "6";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -47,6 +47,10 @@ h2::before { content:""; width:22px; height:3px; background:var(--accent); flex:
   font-family:var(--display); font-weight:700; font-size:20px; letter-spacing:.02em;
   padding:20px 16px; display:flex; align-items:center; justify-content:center; gap:12px; box-shadow:0 2px 6px rgba(48,169,225,.35); }
 .big.dark { background:var(--black); color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.25); }
+.big.relo { background:#e8743b; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+.big.waitgps { opacity:.55; }
+.gpshelp { border:2px solid var(--bad); border-radius:8px; padding:10px 12px; background:var(--bad-bg); color:var(--ink); display:grid; gap:6px; font-size:14px; }
+.gpshelp b { color:var(--bad); } .gpshelp ol { margin:0; padding-left:20px; display:grid; gap:2px; }
 .big svg { width:28px; height:28px; flex:none; }
 .btn { border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:8px;
   font-family:var(--body); font-weight:600; font-size:15px; padding:12px 14px; cursor:pointer; }
@@ -188,6 +192,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <button class="big dark" id="goReceive" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
         Receive spools</button>
+      <button class="big relo" id="goRelocate" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        Relocate spools</button>
     </div>
   </section>
 
@@ -273,6 +280,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <img id="proofPrev" class="photo-prev" alt="Proof photo" hidden>
       <label class="f" id="rRemarksWrap">Remarks (optional)<textarea id="rRemarks" rows="2" placeholder="e.g. one spool with damaged coating"></textarea></label>
       <p class="who" id="gpsNote" style="margin:0"></p>
+      <div class="gpshelp" id="gpsHelp" hidden></div>
     </div>
   </section>
 
@@ -379,6 +387,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
     function label(fn, a) {
       if (fn === "createDelivery") return "Dispatch " + a.from + " → " + a.to + " · " + (a.spools || []).length + " spools";
+      if (fn === "relocateSpools") return "Relocation in NMDC yard · " + (a.spools || []).length + " spools";
       return "Receipt " + a.dn + " · " + (a.spools || []).length + " spools";
     }
     function enqueue(fn, args) {
@@ -433,7 +442,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
           usedSaved = true; pill(); return d;
         });
       }
-      if (fn === "createDelivery" || fn === "confirmReceipt") {
+      if (fn === "createDelivery" || fn === "confirmReceipt" || fn === "relocateSpools") {
         if (navigator.onLine === false) return Promise.resolve(enqueue(fn, args));
         return post(fn, args, 60000).then(function (r) { refreshBundle().catch(function () {}); return r; })
           .catch(function (e) { if (e.server) throw e; return enqueue(fn, args); });
@@ -478,11 +487,14 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       box.appendChild(el("p", { cls: "who", style: "margin:0 0 8px", text: waiting ? (syncing ? "Sending…" : waiting + " saved on this phone — sent automatically when there is signal.") : "Everything has reached the register." }));
       q.forEach(function (i) {
         var row = el("div", { cls: "obx " + i.state });
-        var head = i.state === "sent" ? "✓ Sent" + (i.result && i.result.dn ? " · " + i.result.dn : "") : i.state === "error" ? "⚠ Not accepted" : "⏳ Waiting for signal";
+        var head = i.state === "sent" ? "✓ Sent" + (i.result && i.result.dn ? " · " + i.result.dn : "") +
+          (i.fn === "relocateSpools" && i.result ? " · " + (i.result.relocated || []).length + " relocated" : "") : i.state === "error" ? "⚠ Not accepted" : "⏳ Waiting for signal";
         row.appendChild(el("b", { text: head }));
         row.appendChild(el("div", { text: i.label }));
         row.appendChild(el("small", { text: "Saved " + fmt(i.at) + (i.photoDropped ? " · photo not kept (phone storage full)" : "") }));
         if (i.state === "error") row.appendChild(el("small", { cls: "err", text: i.error }));
+        if (i.state === "sent" && i.fn === "relocateSpools" && i.result && (i.result.rejected || []).length)
+          i.result.rejected.forEach(function (x) { row.appendChild(el("small", { cls: "err", text: "Refused " + x.spool + ": " + x.reason })); });
         var acts = el("div", { cls: "links" });
         if (i.state === "sent" && i.result && i.result.mail && !i.result.mail.error) {
           var full = mailHref(i.result.mail, true), m = full.href.length > 1900 ? mailHref(i.result.mail, false) : full;
@@ -635,15 +647,16 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     view = v;
     if (v !== "vReview") stopGps();
     ["vProfile", "vHome", "vDispatch", "vReceiveList", "vScan", "vReview", "vDone"].forEach(function (id) { $(id).hidden = id !== v; });
-    var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", draft && draft.mode === "receive" ? "Review receipt" : "Confirm and Send"],
-      vReview: ["Keep scanning", draft && draft.mode === "receive" ? "Confirm receipt" : "Send delivery"], vReceiveList: ["Back", null] }[v];
+    var M = draft && draft.mode, RL = M === "relocate";
+    var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", M === "receive" ? "Review receipt" : RL ? "Review relocation" : "Confirm and Send"],
+      vReview: ["Keep scanning", M === "receive" ? "Confirm receipt" : RL ? "Save relocation" : "Send delivery"], vReceiveList: ["Back", null] }[v];
     $("bar").hidden = !bar;
     if (bar) { $("backBtn").textContent = bar[0]; $("nextBtn").hidden = !bar[1]; if (bar[1]) $("nextBtn").textContent = bar[1]; }
     $("clearConfirm").hidden = true;
     $("countBox").hidden = !(v === "vScan" || v === "vReview");
     var t = { vProfile: ["Spool delivery tracking", "Welcome"], vHome: ["Home", "Spool Delivery Tracking"], vDispatch: ["Dispatch", "New delivery"],
-      vReceiveList: ["Receive", "Receive spools"], vScan: [draft && draft.mode === "receive" ? "Receive · " + draft.delivery.dn : "Dispatch · loading", "Scan spools"],
-      vReview: [draft && draft.mode === "receive" ? "Receive · " + draft.delivery.dn : "Dispatch", draft && draft.mode === "receive" ? "Check & submit" : "Check & send"], vDone: ["Spool delivery tracking", "Done"] }[v];
+      vReceiveList: ["Receive", "Receive spools"], vScan: [M === "receive" ? "Receive · " + draft.delivery.dn : RL ? "Relocate in NMDC yard" : "Dispatch · loading", "Scan spools"],
+      vReview: [M === "receive" ? "Receive · " + draft.delivery.dn : RL ? "Relocate in NMDC yard" : "Dispatch", M === "receive" || RL ? "Check & submit" : "Check & send"], vDone: ["Spool delivery tracking", "Done"] }[v];
     $("eyebrow").textContent = t[0]; $("title").textContent = t[1];
     if (v !== "vScan") stopLive();
     window.scrollTo(0, 0);
@@ -656,7 +669,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     $("meName").textContent = me.name;
     $("draftCard").hidden = !(draft && draft.items && draft.items.length);
     if (draft && draft.items && draft.items.length) {
-      $("draftText").textContent = (draft.mode === "receive" ? "Receiving " + draft.delivery.dn : "Dispatch " + draft.header.from + " → " + draft.header.to) +
+      $("draftText").textContent = (draft.mode === "receive" ? "Receiving " + draft.delivery.dn : draft.mode === "relocate" ? "Relocation" : "Dispatch " + draft.header.from + " → " + draft.header.to) +
         " — " + draft.items.length + " spool" + (draft.items.length === 1 ? "" : "s") + " scanned.";
     }
     show("vHome");
@@ -819,7 +832,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         if (draft.items.length < before) setStatus("warn", (before - draft.items.length) + " of your scanned spool(s) were confirmed by someone else meanwhile and are now locked.");
         return;
       }
-      if (draft && draft.items && draft.items.length && !confirm("You have an unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : "dispatch") + ". Discard it and open " + d.dn + "?")) { goHome(); return; }
+      if (draft && draft.items && draft.items.length && !confirm("You have an unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : draft.mode === "relocate" ? "relocation" : "dispatch") + ". Discard it and open " + d.dn + "?")) { goHome(); return; }
       draft = { mode: "receive", ref: uid(), delivery: d, items: [] }; saveDraft();
       clearStatus(); show("vScan"); renderScan();
     }).catch(function (e) { setStatus("bad", friendly(e)); });
@@ -844,6 +857,10 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       rows = [["DN No", d.dn], ["From → To", d.from + " → " + d.to], ["Purpose", d.purpose], ["Sent by", d.senderName + " · " + d.dispatchedAt], ["Spools sent", String(d.sent.length)]];
       if (d.received.length) rows.push(["Already confirmed", d.received.length + " (locked) · " + (d.sent.length - d.received.length) + " balance to scan"]);
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
+    } else if (draft.mode === "relocate") {
+      c.appendChild(el("h2", { text: "Relocate spools" }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools already received at NMDC (MFY) or NMDC (NEMY) that have been moved to another spot in the yard. Stand at the new spot, scan the spools placed there, then save. Your location is recorded with the scans." }));
+      return;
     } else {
       var h = draft.header;
       rows = [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivering to", h.receiverName + (h.receiver2Name ? " & " + h.receiver2Name : "")]];
@@ -866,7 +883,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         el("div", { cls: "spool" }, [el("code", { text: s.spool }), el("small", { text: (extra ? "Not on DN · " : "") + s.time })]),
         el("span", { cls: "lock", title: "Locked", text: "🔒" })]));
     });
-    $("countLabel").textContent = recv ? "Received" : "Loaded";
+    $("countLabel").textContent = recv ? "Received" : draft.mode === "relocate" ? "Scanned" : "Loaded";
     $("empty").hidden = items.length > 0; $("log").hidden = items.length === 0; $("clearBtn").hidden = items.length === 0;
     var log = $("log"); log.textContent = "";
     for (var i = items.length - 1; i >= 0; i--) {
@@ -1011,6 +1028,12 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       }
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Received by: " + me.name + " · " + me.email }));
       $("rRemarks").placeholder = "e.g. one spool with damaged coating";
+    } else if (draft.mode === "relocate") {
+      c.appendChild(el("h2", { text: "Relocation" }));
+      var rl = el("dl", { cls: "kv" });
+      [["Spools", String(items.length)], ["Relocated by", me.name + " · " + me.email]].forEach(function (r) { rl.appendChild(el("dt", { text: r[0] })); rl.appendChild(el("dd", { text: r[1] })); });
+      c.appendChild(rl);
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool gets this spot as its new position in the yard. Spools that are not received at an NMDC yard are refused and listed after saving." }));
     } else {
       var h = draft.header, dl = el("dl", { cls: "kv" });
       [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Second receiver", h.receiver2Name ? h.receiver2Name + " · " + h.receiver2Email : "—"], ["Spools loaded", String(items.length)]]
@@ -1020,38 +1043,71 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("rRemarks").placeholder = "Anything the receiver should know";
     }
     $("rRemarksWrap").hidden = draft.mode !== "receive";
-    proofData = draft.proof || ""; $("proofPrev").hidden = !proofData; if (proofData) $("proofPrev").src = proofData;
+    $("proofBtn").parentNode.querySelector("h2").textContent = draft.mode === "relocate" ? "Location" : "Proof (optional)";
+    $("proofBtn").hidden = draft.mode === "relocate";
+    proofData = draft.mode === "relocate" ? "" : (draft.proof || ""); $("proofPrev").hidden = !proofData; if (proofData) $("proofPrev").src = proofData;
     show("vReview");
     getGps();
   }
-  // Best GPS fix: fresh readings only, keep the most accurate one for up to 12 s (stops early at 10 m or better)
-  var gpsWatch = null, gpsTimer = null;
+  // Location is required at every stage. Best fix: fresh readings only; after the first reading keep improving for
+  // up to 12 s (stop early at 10 m or better). With no reading yet it never gives up: it keeps trying until one arrives.
+  var gpsWatch = null, gpsTimer = null, gpsTries = 0;
   function stopGps() {
     if (gpsWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatch);
     gpsWatch = null; clearTimeout(gpsTimer);
+  }
+  function gpsGate() {
+    if (view !== "vReview" || busy) return;
+    var b = $("nextBtn"), M = draft && draft.mode;
+    var label = M === "receive" ? "Confirm receipt" : M === "relocate" ? "Save relocation" : "Send delivery";
+    b.textContent = gps ? label : "📍 Waiting for location…";
+    b.classList.toggle("waitgps", !gps);
   }
   function gpsText() {
     if (!gps) return;
     var a = Math.round(gps.acc);
     $("gpsNote").textContent = a > 50
-      ? "📍 Weak GPS signal (±" + a + " m) — step into the open for a better fix. You can still submit."
+      ? "📍 Location recorded, weak signal (±" + a + " m). Step into the open — it keeps improving for a few seconds."
       : "📍 Location recorded (±" + a + " m).";
   }
+  function gpsHelp(kind) {
+    var h = $("gpsHelp"); h.textContent = "";
+    if (!kind) { h.hidden = true; return; }
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    var steps = kind === "denied"
+      ? (ios ? ["Open the iPhone Settings app → Privacy & Security → Location Services: turn it On.", "Scroll to Safari Websites (or the browser you use) → choose While Using the App.", "Settings → Safari → Location → Allow (or Ask).", "Come back here and tap Try again."]
+             : ["Tap the icon to the left of the address bar (or open the app's info: long-press the app icon → App info).", "Open Permissions → Location → Allow.", "Make sure Location is switched on in the phone's quick settings.", "Come back here and tap Try again."])
+      : kind === "none" ? ["This browser can't share location. Open the app in Chrome (Android) or Safari (iPhone)."]
+      : ["Switch on Location (GPS) in the phone's quick settings.", "Step outside or away from steel structures and tall stacks.", "Tap Try again."];
+    h.appendChild(el("b", { text: kind === "denied" ? "Location is blocked for this app" : kind === "none" ? "Location not supported" : "No location yet" }));
+    h.appendChild(el("p", { style: "margin:0", text: "Location is required to " + (draft && draft.mode === "receive" ? "confirm a receipt" : draft && draft.mode === "relocate" ? "relocate spools" : "release spools") + ". Your scans are kept on this phone." }));
+    var ol = el("ol"); steps.forEach(function (t) { ol.appendChild(el("li", { text: t })); }); h.appendChild(ol);
+    if (kind !== "none") { var b = el("button", { cls: "btn primary", type: "button", text: "Try again" }); b.addEventListener("click", function () { getGps(); }); h.appendChild(b); }
+    h.hidden = false;
+  }
   function getGps() {
-    stopGps(); gps = null; $("gpsNote").textContent = "";
-    if (!navigator.geolocation) return;
+    stopGps(); gps = null; gpsTries = 0; $("gpsNote").textContent = ""; gpsHelp(""); gpsGate();
+    if (!navigator.geolocation) { gpsHelp("none"); return; }
     $("gpsNote").textContent = "Recording location…";
+    watchGps();
+  }
+  function watchGps() {
+    stopGps();
     try {
       gpsWatch = navigator.geolocation.watchPosition(function (p) {
         if (gpsWatch == null) return; // already stopped
+        var first = !gps;
         if (!gps || p.coords.accuracy < gps.acc) { gps = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy }; gpsText(); }
+        if (first) { gpsHelp(""); gpsGate(); clearTimeout(gpsTimer); gpsTimer = setTimeout(stopGps, 12000); }
         if (gps.acc <= 10) stopGps();
-      }, function () {
-        if (!gps) $("gpsNote").textContent = "Location not available — that's fine, you can still submit.";
-        stopGps();
+      }, function (err) {
+        if (gps) { stopGps(); return; }
+        if (err && err.code === 1) { stopGps(); $("gpsNote").textContent = ""; gpsHelp("denied"); return; }
+        gpsTries++; if (gpsTries >= 2) gpsHelp("weak");
+        $("gpsNote").textContent = "Still looking for your location… move into the open.";
+        setTimeout(function () { if (!gps && view === "vReview") watchGps(); }, 1500);
       }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-      gpsTimer = setTimeout(function () { stopGps(); if (!gps) $("gpsNote").textContent = "Location not available — that's fine, you can still submit."; }, 12000);
-    } catch (e) { $("gpsNote").textContent = ""; }
+    } catch (e) { gpsHelp("none"); }
   }
   $("proofBtn").addEventListener("click", function () { $("proofInput").value = ""; $("proofInput").click(); });
   $("proofInput").addEventListener("change", async function (e) {
@@ -1099,11 +1155,14 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
   function submit() {
     if (busy) return;
+    if (!gps) { setStatus("bad", "Location is required. Wait until the location is recorded" + ($("gpsHelp").hidden ? "." : " — see the steps below.")); if (gpsWatch == null && $("gpsHelp").hidden) getGps(); return; }
     busy = true; var btn = $("nextBtn"), label = btn.textContent;
     btn.disabled = true; btn.textContent = ""; btn.appendChild(el("span", { cls: "spin" })); btn.appendChild(document.createTextNode(" Sending…"));
     var done = function () { busy = false; btn.disabled = false; btn.textContent = label; };
     var call;
-    if (draft.mode === "receive") {
+    if (draft.mode === "relocate") {
+      call = server("relocateSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps });
+    } else if (draft.mode === "receive") {
       call = server("confirmReceipt", { dn: draft.delivery.dn, ref: draft.ref, receivedBy: me.name, receiverEmail: me.email, spools: draft.items, remarks: $("rRemarks").value.trim(), photo: proofData, gps: gps });
     } else {
       var h = draft.header;
@@ -1118,12 +1177,23 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (res && res.queued) {
         box.appendChild(el("b", { text: "Saved on this phone" }));
         box.appendChild(el("p", { cls: "dn", text: mode === "receive" ? (d && d.dn) : "Waiting for signal" }));
-        box.appendChild(el("p", { text: res.count + " spools · " + (mode === "receive" ? "receipt" : h.from + " → " + h.to) }));
+        box.appendChild(el("p", { text: res.count + " spools · " + (mode === "receive" ? "receipt" : mode === "relocate" ? "relocation" : h.from + " → " + h.to) }));
         box.appendChild(el("p", { cls: "who", text: "No signal right now. It will be sent to the register automatically as soon as this phone has signal — just open the app again. " +
-          (mode === "receive" ? "The Send email button" : "The delivery note number and the Send email button") + " will then appear in the Outbox on the home screen." }));
+          (mode === "relocate" ? "The result" : mode === "receive" ? "The Send email button" : "The delivery note number and the Send email button") + " will then appear in the Outbox on the home screen." }));
         renderMail(null); clearStatus(); show("vDone"); return;
       }
-      if (mode === "receive") {
+      if (mode === "relocate") {
+        var okN = (res.relocated || []).length, bad = res.rejected || [];
+        box.appendChild(el("b", { text: res.duplicate ? "Already saved" : okN ? "Relocated" : "Nothing relocated" }));
+        box.appendChild(el("p", { cls: "dn", text: okN + " spool" + (okN === 1 ? "" : "s") }));
+        if (okN) box.appendChild(el("p", { text: "New position saved" + (res.gps ? " · " + res.gps : "") + "." }));
+        if (bad.length) {
+          box.appendChild(el("p", { cls: "status bad", text: bad.length + " refused:" }));
+          var ul = el("ol", { cls: "log" });
+          bad.forEach(function (x) { ul.appendChild(el("li", { cls: "missing" }, [el("span", { cls: "idx", text: "" }), el("div", { cls: "spool" }, [el("code", { text: x.spool }), el("small", { text: x.reason })])])); });
+          box.appendChild(ul);
+        }
+      } else if (mode === "receive") {
         if (res.duplicate) { box.appendChild(el("b", { text: "Already confirmed" })); box.appendChild(el("p", { cls: "dn", text: res.dn })); }
         else {
           var complete = !res.balance && !res.totalExtra;
@@ -1142,6 +1212,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
       }
       if (res.duplicate) box.appendChild(el("p", { cls: "who", text: "(This was already sent earlier — no duplicate was created.)" }));
+      if (mode === "relocate") { renderMail(null); clearStatus(); show("vDone"); return; }
       renderMail(res.mail, mode === "receive" ? (d && d.senderName) : (h && (h.receiverName + (h.receiver2Name ? " and " + h.receiver2Name : ""))), mode);
       clearStatus(); show("vDone");
     }).catch(function (e) {
@@ -1177,11 +1248,17 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
   /* ---------- home buttons ---------- */
   $("goDispatch").addEventListener("click", function () {
-    if (draft && draft.items && draft.items.length && draft.mode !== "dispatch" && !confirm("Discard the unfinished receipt for " + draft.delivery.dn + "?")) return;
+    if (draft && draft.items && draft.items.length && draft.mode !== "dispatch" && !confirm("Discard the unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : "relocation") + "?")) return;
     if (!(draft && draft.mode === "dispatch")) draft = null;
     startDispatch();
   });
   $("goReceive").addEventListener("click", startReceive);
+  $("goRelocate").addEventListener("click", function () {
+    clearStatus();
+    if (draft && draft.items && draft.items.length && draft.mode !== "relocate" && !confirm("Discard the unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : "dispatch") + "?")) return;
+    if (!(draft && draft.mode === "relocate")) { draft = { mode: "relocate", ref: uid(), items: [] }; saveDraft(); }
+    show("vScan"); renderScan();
+  });
   $("draftResume").addEventListener("click", function () {
     clearStatus();
     if (draft && draft.mode === "receive") openDelivery(draft.delivery.dn); else { show("vScan"); renderScan(); }
