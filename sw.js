@@ -1,6 +1,6 @@
 /* Spool Delivery Tracking – offline cache. The app opens from this cache when there is no signal,
    and quietly refreshes itself from the website whenever there is. */
-var CACHE = "sd-app-6";
+var CACHE = "sd-app-7";
 var SHELL = ["./", "index.html", "trail.html", "jsQR.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", function (e) {

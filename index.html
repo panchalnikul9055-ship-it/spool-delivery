@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "6";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "7";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -1124,7 +1124,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   /* ---------- email sent from the person's own mailbox ---------- */
   function mailHref(m, withList) {
     var body = m.intro + (withList && m.lines && m.lines.length ? "\n\n" + m.listTitle + "\n" + m.lines.join("\n") :
-      (m.lines && m.lines.length ? "\n\n(" + m.lines.length + " spools – full list in the Excel file above.)" : "")) + "\n\n" + m.outro;
+      (m.lines && m.lines.length ? "\n\n(" + m.lines.length + " spools – please refer to the Excel file listed below for the complete list.)" : "")) + "\n\n" + m.outro;
     var enc = function (x) { return encodeURIComponent(x).replace(/%2C/g, ",").replace(/%40/g, "@"); };
     return { text: "To: " + m.to + (m.cc ? "\nCc: " + m.cc : "") + "\nSubject: " + m.subject + "\n\n" + body,
       href: "mailto:" + enc(m.to) + "?" + (m.cc ? "cc=" + enc(m.cc) + "&" : "") + "subject=" + encodeURIComponent(m.subject) + "&body=" + encodeURIComponent(body) };
