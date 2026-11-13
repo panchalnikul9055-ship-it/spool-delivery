@@ -79,6 +79,7 @@ textarea { resize:vertical; }
 .cam.hit .frame { border-color:#3ddc84; }
 .cam .camclose { position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:8px; padding:8px 12px; font:600 14px var(--body); cursor:pointer; }
 .cam .camtip { position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:13px; text-shadow:0 1px 3px #000; }
+.pick { display:grid; grid-template-columns:1fr 1.6fr; gap:8px; margin-bottom:8px; }
 .manual { display:flex; gap:8px; } .manual input { flex:1; font-family:var(--mono); font-size:14px; }
 
 .status { border-radius:8px; padding:10px 12px; font-size:14px; font-weight:500; display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
@@ -256,8 +257,12 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     </div>
     <input type="file" id="cam" accept="image/*" capture="environment" hidden>
     <input type="file" id="gallery" accept="image/*" hidden>
+    <div id="moduleWrap" class="pick" hidden>
+      <label class="f">Module<select id="moduleSel"></select></label>
+      <label class="f" id="spoolSelWrap" hidden>Spool<select id="spoolSel"></select></label>
+    </div>
     <form class="manual" id="manualForm" autocomplete="off">
-      <input id="manualInput" placeholder="Or type spool no." aria-label="Spool number">
+      <input id="manualInput" list="spoolOpts" placeholder="Or type / pick spool no." aria-label="Spool number"><datalist id="spoolOpts"></datalist>
       <button class="btn" type="submit">Add</button>
     </form>
 
@@ -653,6 +658,8 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function show(v) {
     view = v;
     if (v !== "vReview") stopGps();
+    if (v === "vScan" && draft && draft.mode === "relocate") startScanGps(); else stopScanGps();
+    if (v === "vScan") { try { fillSpoolOpts(); } catch (e) {} }
     ["vProfile", "vHome", "vDispatch", "vReceiveList", "vScan", "vReview", "vDone"].forEach(function (id) { $(id).hidden = id !== v; });
     var M = draft && draft.mode, RL = M === "relocate";
     var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", M === "receive" ? "Review receipt" : RL ? "Review relocation" : "Confirm and Send"],
@@ -866,7 +873,8 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocate spools" }));
-      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools already received at NMDC (MFY) or NMDC (NEMY) that have been moved to another spot in the yard. Stand at the new spot, scan the spools placed there, then save. Your location is recorded with the scans." }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools already received at NMDC (MFY) or NMDC (NEMY) that have been moved to another spot in the yard. Scan each spool where it now lies: its location is recorded the moment it is scanned, so spools in different spots can be scanned in one round. No waybill is made for a relocation." }));
+      c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
       return;
     } else {
       var h = draft.header;
@@ -897,7 +905,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       var it = items[i], ok = onDn(it.spool);
       var li = el("li", { cls: (it.spool === lastAdded ? "fresh " : "") + (ok ? "" : "extra") }, [
         el("span", { cls: "idx", text: p2(i + 1) }),
-        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
+        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) + (it.gps ? " · 📍 ±" + Math.round(it.gps.acc) + " m" : draft.mode === "relocate" ? " · 📍 at save point" : "") }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
         el("button", { cls: "del", type: "button", "aria-label": "Remove " + it.spool, "data-spool": it.spool, text: "×" })
       ]);
       log.appendChild(li);
@@ -912,7 +920,11 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!spool || !draft) return false;
     if (isLocked(spool)) { setStatus("warn", "Already confirmed earlier — locked, not counted again:", spool); return false; }
     if (draft.items.some(function (x) { return x.spool.toUpperCase() === spool.toUpperCase(); })) { setStatus("warn", "Already scanned, skipped:", spool); return false; }
-    draft.items.push({ spool: spool, ts: Date.now() }); lastAdded = spool; saveDraft(); renderScan();
+    var hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === spool.toUpperCase(); })[0];
+    if (hit) spool = hit[0];
+    var item = { spool: spool, ts: Date.now() };
+    if (draft.mode === "relocate" && scanFix && Date.now() - scanFix.t < 60000) item.gps = { lat: scanFix.lat, lng: scanFix.lng, acc: scanFix.acc };
+    draft.items.push(item); lastAdded = spool; saveDraft(); renderScan();
     if (onDn(spool)) setStatus("ok", "Added #" + draft.items.length + ":", spool);
     else setStatus("warn", "Not on this delivery note — added as extra:", spool);
     return true;
@@ -1068,6 +1080,47 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   // Location is required at every stage. Best fix: fresh readings only; after the first reading keep improving for
   // up to 12 s (stop early at 10 m or better). With no reading yet it never gives up: it keeps trying until one arrives.
   var gpsWatch = null, gpsTimer = null, gpsTries = 0;
+  // Relocation: a live location while scanning, so each spool is saved with the spot where it was scanned
+  var scanWatch = null, scanFix = null;
+  function startScanGps() {
+    if (scanWatch == null && navigator.geolocation) {
+      try {
+        scanWatch = navigator.geolocation.watchPosition(function (p) {
+          scanFix = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() }; scanGpsText();
+        }, function () { scanGpsText(); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 });
+      } catch (e) {}
+    }
+    scanGpsText();
+  }
+  function stopScanGps() { if (scanWatch != null) { try { navigator.geolocation.clearWatch(scanWatch); } catch (e) {} scanWatch = null; } }
+  function scanGpsText() {
+    var n = $("scanGpsNote"); if (!n) return;
+    var ok = scanFix && Date.now() - scanFix.t < 60000;
+    n.textContent = ok ? "📍 Location live (±" + Math.round(scanFix.acc) + " m) — saved with each scan" : "📍 Waiting for location… spools scanned now take the location recorded when you save";
+    n.style.color = ok ? "var(--ok)" : "var(--warn)";
+  }
+  // Spool list from the "Spool List" tab: pick a module, then a spool (or type with suggestions)
+  function fillSpoolOpts() {
+    var list = (cfg && cfg.spools) || [], sel = $("moduleSel"), dl = $("spoolOpts");
+    $("moduleWrap").hidden = !list.length;
+    var mods = [];
+    list.forEach(function (r) { if (r[1] && mods.indexOf(r[1]) < 0) mods.push(r[1]); });
+    mods.sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+    var keep = sel.value || load("sd-module") || "";
+    sel.textContent = ""; sel.appendChild(el("option", { value: "", text: "All (" + list.length + ")" }));
+    mods.forEach(function (m) { sel.appendChild(el("option", { value: m, text: m })); });
+    sel.value = mods.indexOf(keep) >= 0 ? keep : "";
+    var rows = list.filter(function (r) { return !sel.value || r[1] === sel.value; });
+    dl.textContent = "";
+    rows.forEach(function (r) { var o = document.createElement("option"); o.value = r[0]; if (r[1]) o.label = "Module " + r[1]; dl.appendChild(o); });
+    var ss = $("spoolSel"), have = {};
+    ((draft && draft.items) || []).forEach(function (i) { have[i.spool.toUpperCase()] = 1; });
+    $("spoolSelWrap").hidden = !sel.value;
+    ss.textContent = ""; ss.appendChild(el("option", { value: "", text: "Pick a spool (" + rows.length + ")" }));
+    rows.forEach(function (r) { ss.appendChild(el("option", { value: r[0], text: (have[r[0].toUpperCase()] ? "✓ " : "") + r[0] })); });
+  }
+  $("moduleSel").addEventListener("change", function () { store("sd-module", $("moduleSel").value); fillSpoolOpts(); });
+  $("spoolSel").addEventListener("change", function () { var v = $("spoolSel").value; if (v && add(v)) feedback(onDn(v)); fillSpoolOpts(); });
   function stopGps() {
     if (gpsWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatch);
     gpsWatch = null; clearTimeout(gpsTimer);
