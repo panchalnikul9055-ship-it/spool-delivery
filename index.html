@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "11";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "12";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -408,7 +408,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
     function label(fn, a) {
       if (fn === "createDelivery") return "Dispatch " + a.from + " → " + a.to + " · " + (a.spools || []).length + " spools";
-      if (fn === "relocateSpools") return "Relocation in NMDC yard · " + (a.spools || []).length + " spools";
+      if (fn === "relocateSpools") return "Relocation · " + (a.yard || "NMDC yard") + (a.project ? " · Project " + a.project : "") + " · " + (a.spools || []).length + " spools";
       return "Receipt " + a.dn + " · " + (a.spools || []).length + " spools";
     }
     function enqueue(fn, args) {
@@ -882,6 +882,21 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocate spools" }));
+      var yards = ((cfg && cfg.locations) || []).filter(function (l) { return /^NMDC\s*\(\s*(MFY|NEMY)\s*\)$/i.test(l); });
+      if (!yards.length) yards = ["NMDC (MFY)", "NMDC (NEMY)"];
+      var projs = (cfg && cfg.projects) || [];
+      if (!draft.project && projs.indexOf(load("sd-relo-project")) >= 0) draft.project = load("sd-relo-project");
+      if (!draft.yard && yards.indexOf(load("sd-relo-yard")) >= 0) draft.yard = load("sd-relo-yard");
+      var pick = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
+      [["Project No", "reloProject", projs, draft.project, "project", "sd-relo-project"], ["Yard", "reloYard", yards, draft.yard, "yard", "sd-relo-yard"]].forEach(function (f) {
+        var lab = el("label", { cls: "f" }); lab.appendChild(document.createTextNode(f[0]));
+        var s = el("select", { id: f[1] }); s.appendChild(el("option", { value: "", text: "Select…" }));
+        f[2].forEach(function (v) { s.appendChild(el("option", { value: v, text: v })); });
+        s.value = f[3] || "";
+        s.addEventListener("change", function () { draft[f[4]] = s.value; store(f[5], s.value); saveDraft(); });
+        lab.appendChild(s); pick.appendChild(lab);
+      });
+      c.appendChild(pick);
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools moved to another spot in the yard. Scan each spool where it now lies: its location is recorded the moment it is scanned, so spools in different spots can be scanned in one round. No waybill is made for a relocation." }));
       c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
       return;
@@ -1127,7 +1142,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocation" }));
       var rl = el("dl", { cls: "kv" });
-      [["Spools", String(items.length)], ["Relocated by", me.name + " · " + me.email]].forEach(function (r) { rl.appendChild(el("dt", { text: r[0] })); rl.appendChild(el("dd", { text: r[1] })); });
+      [["Project No", draft.project || "—"], ["Yard", draft.yard || "—"], ["Spools", String(items.length)], ["Relocated by", me.name + " · " + me.email]].forEach(function (r) { rl.appendChild(el("dt", { text: r[0] })); rl.appendChild(el("dd", { text: r[1] })); });
       c.appendChild(rl);
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool is saved with the spot where it was scanned (or this spot if it had no location yet). Every spool is recorded, whatever its status. The Movements tab keeps one row per spool with its latest position." }));
     } else {
@@ -1302,6 +1317,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function submit() {
     if (busy) return;
     if (!gps) { setStatus("bad", "Location is required. Wait until the location is recorded" + ($("gpsHelp").hidden ? "." : " — see the steps below.")); if (gpsWatch == null && $("gpsHelp").hidden) getGps(); return; }
+    if (draft.mode === "relocate" && (!draft.project || !draft.yard)) {
+      setStatus("bad", "Select the Project No and the Yard on the scanning screen before saving the relocation."); show("vScan"); renderScan(); return;
+    }
     if (draft.mode !== "receive" && draft.mode !== "relocate") {
       var truckNo = $("tTruck").value.trim(), driverName = $("tDriver").value.trim();
       if (!truckNo || !driverName) { setStatus("bad", "Enter the truck number and the driver's name. Both are printed on the Way Bill."); $(truckNo ? "tDriver" : "tTruck").focus(); return; }
@@ -1315,7 +1333,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     var done = function () { busy = false; btn.disabled = false; btn.textContent = label; };
     var call;
     if (draft.mode === "relocate") {
-      call = server("relocateSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps });
+      call = server("relocateSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps, project: draft.project || "", yard: draft.yard || "" });
     } else if (draft.mode === "receive") {
       call = server("confirmReceipt", { dn: draft.delivery.dn, ref: draft.ref, receivedBy: me.name, receiverEmail: me.email, spools: draft.items, remarks: $("rRemarks").value.trim(), photo: proofData, gps: gps });
     } else {
