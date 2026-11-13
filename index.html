@@ -80,7 +80,15 @@ textarea { resize:vertical; }
 .cam .camclose { position:absolute; top:10px; right:10px; background:rgba(0,0,0,.6); color:#fff; border:0; border-radius:8px; padding:8px 12px; font:600 14px var(--body); cursor:pointer; }
 .cam .camtip { position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:13px; text-shadow:0 1px 3px #000; }
 .pick { display:grid; grid-template-columns:1fr 1.6fr; gap:8px; margin-bottom:8px; }
-.manual { display:flex; gap:8px; } .manual input { flex:1; font-family:var(--mono); font-size:14px; }
+.manual { display:flex; gap:8px; }
+.suggest { margin-top:6px; background:#fff; border:1px solid var(--line, #d6dee9); border-radius:10px; max-height:300px; overflow-y:auto; box-shadow:0 6px 18px rgba(0,0,0,.12); }
+.suggest button { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; text-align:left; border:0; border-bottom:1px solid #eef1f4; background:none; padding:11px 12px; font:600 14px var(--mono, monospace); color:inherit; cursor:pointer; }
+.suggest button:last-child { border-bottom:0; }
+.suggest button:active, .suggest button.on { background:#eaf5fb; }
+.suggest button.have { color:#8a949b; }
+.suggest small { font:500 11px system-ui, sans-serif; color:#5d6670; white-space:nowrap; }
+.suggest mark { background:#fdf0d9; color:inherit; padding:0; }
+.suggest .more { padding:9px 12px; font-size:12px; color:#5d6670; } .manual input { flex:1; font-family:var(--mono); font-size:14px; }
 
 .status { border-radius:8px; padding:10px 12px; font-size:14px; font-weight:500; display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
 .status code { font-family:var(--mono); font-weight:600; word-break:break-all; }
@@ -262,9 +270,10 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <label class="f" id="spoolSelWrap" hidden>Spool<select id="spoolSel"></select></label>
     </div>
     <form class="manual" id="manualForm" autocomplete="off">
-      <input id="manualInput" list="spoolOpts" placeholder="Or type / pick spool no." aria-label="Spool number"><datalist id="spoolOpts"></datalist>
+      <input id="manualInput" placeholder="Type to search spool no." aria-label="Spool number" autocomplete="off" autocapitalize="characters" spellcheck="false"><datalist id="spoolOpts"></datalist>
       <button class="btn" type="submit">Add</button>
     </form>
+    <div id="spoolSuggest" class="suggest" hidden></div>
 
     <div class="log-head"><h2>Scanned spools</h2><button class="linkbtn" id="clearBtn" type="button" hidden>Clear list</button></div>
     <div id="empty" class="empty">No spools scanned yet. Duplicates are skipped automatically.</div>
@@ -929,7 +938,75 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     else setStatus("warn", "Not on this delivery note — added as extra:", spool);
     return true;
   }
-  $("manualForm").addEventListener("submit", function (e) { e.preventDefault(); add($("manualInput").value); $("manualInput").value = ""; });
+  $("manualForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = $("manualInput").value, m = spoolMatches(v);
+    // a picked/highlighted suggestion, or the only match, wins over the half-typed text
+    if (sugPick >= 0 && m.rows[sugPick]) v = m.rows[sugPick][0];
+    else if (m.rows.length === 1 && m.total === 1) v = m.rows[0][0];
+    if (add(v)) feedback(onDn(String(v).trim()));
+    $("manualInput").value = ""; hideSuggest();
+  });
+  /* ---------- search-as-you-type over the Spool List ---------- */
+  var sugPick = -1, sugTimer = null;
+  function normSpool(s) { return String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+  function spoolMatches(q) {
+    var list = (cfg && cfg.spools) || [], mod = $("moduleSel") ? $("moduleSel").value : "", nq = normSpool(q);
+    if (!nq) return { rows: [], total: 0 };
+    var hits = [];
+    list.forEach(function (r) {
+      if (mod && r[1] !== mod) return;
+      var ns = normSpool(r[0]), pos = ns.indexOf(nq);
+      if (pos < 0 && normSpool(r[1]) === nq) pos = 999;   // typing a module number lists its spools
+      if (pos >= 0) hits.push([r[0], r[1], pos]);
+    });
+    hits.sort(function (a, b) { return a[2] - b[2] || a[0].localeCompare(b[0], undefined, { numeric: true }); });
+    return { rows: hits.slice(0, 40), total: hits.length };
+  }
+  function hideSuggest() { $("spoolSuggest").hidden = true; $("spoolSuggest").textContent = ""; sugPick = -1; }
+  function showSuggest() {
+    var q = $("manualInput").value, box = $("spoolSuggest"), m = spoolMatches(q);
+    box.textContent = ""; sugPick = -1;
+    if (!normSpool(q) || !((cfg && cfg.spools) || []).length) { box.hidden = true; return; }
+    var have = {};
+    ((draft && draft.items) || []).forEach(function (i) { have[i.spool.toUpperCase()] = 1; });
+    if (!m.rows.length) { box.appendChild(el("div", { cls: "more", text: "No spool in the list matches “" + q.trim() + "”. Tap Add to add it as typed." })); box.hidden = false; return; }
+    var nq = normSpool(q);
+    m.rows.forEach(function (r, i) {
+      var b = el("button", { type: "button", cls: have[r[0].toUpperCase()] ? "have" : "" });
+      // highlight the typed part (matched ignoring dashes and spaces)
+      var s = r[0], map = [], ns = "";
+      for (var k = 0; k < s.length; k++) if (/[A-Za-z0-9]/.test(s[k])) { map.push(k); ns += s[k].toUpperCase(); }
+      var at = ns.indexOf(nq), code = el("span");
+      if (at >= 0) {
+        var a = map[at], z = map[at + nq.length - 1] + 1;
+        code.appendChild(document.createTextNode(s.slice(0, a))); code.appendChild(el("mark", { text: s.slice(a, z) })); code.appendChild(document.createTextNode(s.slice(z)));
+      } else code.textContent = s;
+      b.appendChild(code);
+      b.appendChild(el("small", { text: (have[r[0].toUpperCase()] ? "✓ added · " : "") + (r[1] ? "Module " + r[1] : "") }));
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); });   // keep the keyboard open
+      b.addEventListener("click", function () {
+        if (add(r[0])) feedback(onDn(r[0]));
+        $("manualInput").value = ""; hideSuggest(); $("manualInput").focus();
+      });
+      box.appendChild(b);
+    });
+    if (m.total > m.rows.length) box.appendChild(el("div", { cls: "more", text: (m.total - m.rows.length) + " more — keep typing to narrow down" }));
+    box.hidden = false;
+    // keep the list clear of the bottom buttons, without pushing the search box under the top header
+    var rb = box.getBoundingClientRect(), bar = $("bar"), lim = (bar && !bar.hidden ? bar.getBoundingClientRect().top : innerHeight) - 8;
+    if (rb.bottom > lim) window.scrollBy(0, Math.max(0, Math.min(rb.bottom - lim, $("manualInput").getBoundingClientRect().top - 140)));
+  }
+  function markPick() { var bs = $("spoolSuggest").querySelectorAll("button"); for (var i = 0; i < bs.length; i++) bs[i].classList.toggle("on", i === sugPick); if (bs[sugPick]) bs[sugPick].scrollIntoView({ block: "nearest" }); }
+  $("manualInput").addEventListener("input", function () { clearTimeout(sugTimer); sugTimer = setTimeout(showSuggest, 80); });
+  $("manualInput").addEventListener("focus", function () { if ($("manualInput").value) showSuggest(); });
+  $("manualInput").addEventListener("blur", function () { setTimeout(hideSuggest, 200); });
+  $("manualInput").addEventListener("keydown", function (e) {
+    var n = $("spoolSuggest").querySelectorAll("button").length;
+    if (e.key === "ArrowDown" && n) { e.preventDefault(); sugPick = (sugPick + 1) % n; markPick(); }
+    else if (e.key === "ArrowUp" && n) { e.preventDefault(); sugPick = (sugPick - 1 + n) % n; markPick(); }
+    else if (e.key === "Escape") hideSuggest();
+  });
   $("clearBtn").addEventListener("click", function () { $("clearConfirm").hidden = false; });
   $("clearNo").addEventListener("click", function () { $("clearConfirm").hidden = true; });
   $("clearYes").addEventListener("click", function () { draft.items = []; saveDraft(); renderScan(); $("clearConfirm").hidden = true; setStatus("warn", "List cleared."); });
@@ -1119,7 +1196,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     ss.textContent = ""; ss.appendChild(el("option", { value: "", text: "Pick a spool (" + rows.length + ")" }));
     rows.forEach(function (r) { ss.appendChild(el("option", { value: r[0], text: (have[r[0].toUpperCase()] ? "✓ " : "") + r[0] })); });
   }
-  $("moduleSel").addEventListener("change", function () { store("sd-module", $("moduleSel").value); fillSpoolOpts(); });
+  $("moduleSel").addEventListener("change", function () { store("sd-module", $("moduleSel").value); fillSpoolOpts(); if ($("manualInput").value) showSuggest(); });
   $("spoolSel").addEventListener("change", function () { var v = $("spoolSel").value; if (v && add(v)) feedback(onDn(v)); fillSpoolOpts(); });
   function stopGps() {
     if (gpsWatch != null && navigator.geolocation) navigator.geolocation.clearWatch(gpsWatch);
