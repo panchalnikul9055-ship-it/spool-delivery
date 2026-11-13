@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "12";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "13";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -250,6 +250,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   <section id="vScan" hidden>
     <div class="card" id="tripCard"></div>
 
+    <div id="scanControls">
     <button class="big" id="liveBtn" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>
       Scan spool QR</button>
@@ -274,6 +275,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <button class="btn" type="submit">Add</button>
     </form>
     <div id="spoolSuggest" class="suggest" hidden></div>
+    </div>
 
     <div class="log-head"><h2>Scanned spools</h2><button class="linkbtn" id="clearBtn" type="button" hidden>Clear list</button></div>
     <div id="empty" class="empty">No spools scanned yet. Duplicates are skipped automatically.</div>
@@ -893,10 +895,11 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         var s = el("select", { id: f[1] }); s.appendChild(el("option", { value: "", text: "Select…" }));
         f[2].forEach(function (v) { s.appendChild(el("option", { value: v, text: v })); });
         s.value = f[3] || "";
-        s.addEventListener("change", function () { draft[f[4]] = s.value; store(f[5], s.value); saveDraft(); });
+        s.addEventListener("change", function () { draft[f[4]] = s.value; store(f[5], s.value); saveDraft(); renderScan(); });
         lab.appendChild(s); pick.appendChild(lab);
       });
       c.appendChild(pick);
+      if (!(draft.project && draft.yard)) c.appendChild(el("p", { cls: "who", style: "margin:0 0 8px;font-weight:700;color:var(--warn)", text: "Select the Project No and the Yard first. The scanner opens once both are chosen, and every spool is saved with them." }));
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools moved to another spot in the yard. Scan each spool where it now lies: its location is recorded the moment it is scanned, so spools in different spots can be scanned in one round. No waybill is made for a relocation." }));
       c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
       return;
@@ -910,6 +913,10 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   }
   function renderScan() {
     renderTrip();
+    // Relocation: the scanner opens only once the Project No and the Yard are chosen
+    var gate = draft.mode === "relocate" && !(draft.project && draft.yard);
+    $("scanControls").hidden = gate;
+    if (gate) { try { stopLive(); } catch (e) {} }
     var items = draft.items, recv = draft.mode === "receive";
     $("count").textContent = recv ? (draft.delivery.received.length + items.filter(function (i) { return onDn(i.spool); }).length) + "/" + draft.delivery.sent.length : items.length;
     var lk = recv ? draft.delivery.received.concat(draft.delivery.extra) : [];
@@ -929,7 +936,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       var it = items[i], ok = onDn(it.spool);
       var li = el("li", { cls: (it.spool === lastAdded ? "fresh " : "") + (ok ? "" : "extra") }, [
         el("span", { cls: "idx", text: p2(i + 1) }),
-        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) + (it.gps ? " · 📍 ±" + Math.round(it.gps.acc) + " m" : draft.mode === "relocate" ? " · 📍 at save point" : "") }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
+        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) + (it.gps ? " · 📍 ±" + Math.round(it.gps.acc) + " m" : draft.mode === "relocate" ? " · 📍 at save point" : "") + (draft.mode === "relocate" && it.yard ? " · " + it.project + " · " + it.yard : "") }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
         el("button", { cls: "del", type: "button", "aria-label": "Remove " + it.spool, "data-spool": it.spool, text: "×" })
       ]);
       log.appendChild(li);
@@ -944,10 +951,12 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!spool || !draft) return false;
     if (isLocked(spool)) { setStatus("warn", "Already confirmed earlier — locked, not counted again:", spool); return false; }
     if (draft.items.some(function (x) { return x.spool.toUpperCase() === spool.toUpperCase(); })) { setStatus("warn", "Already scanned, skipped:", spool); return false; }
+    if (draft.mode === "relocate" && !(draft.project && draft.yard)) { setStatus("bad", "Select the Project No and the Yard first."); return false; }
     var hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === spool.toUpperCase(); })[0];
     if (hit) spool = hit[0];
     var item = { spool: spool, ts: Date.now() };
     if (draft.mode === "relocate" && scanFix && Date.now() - scanFix.t < 60000) item.gps = { lat: scanFix.lat, lng: scanFix.lng, acc: scanFix.acc };
+    if (draft.mode === "relocate") { item.project = draft.project; item.yard = draft.yard; }   // each spool keeps its own Project No and Yard
     draft.items.push(item); lastAdded = spool; saveDraft(); renderScan();
     if (onDn(spool)) setStatus("ok", "Added #" + draft.items.length + ":", spool);
     else setStatus("warn", "Not on this delivery note — added as extra:", spool);
