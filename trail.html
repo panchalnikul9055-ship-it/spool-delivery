@@ -129,13 +129,13 @@ body { background:var(--bg); color:var(--ink); font:15px/1.45 var(--body); }
     $("spoolNo").textContent = T.spool;
     if (T.at) $("upd").textContent = "Updated " + String(T.at).slice(0, 16);
     var chips = $("chips"), nRelo = T.steps.filter(function (s) { return s.kind === "relo"; }).length;
-    [["Project " + T.project, ""], [T.location, ""], [T.status, /^Received/.test(T.status) ? "ok" : ""], [nRelo + (nRelo === 1 ? " relocation" : " relocations"), ""]]
+    [["Project " + T.project, ""], [T.location, ""], [T.status, /^Received/.test(T.status) ? "ok" : ""], [T.latest || "", ""], [nRelo + (nRelo === 1 ? " relocation" : " relocations"), ""]]
       .forEach(function (c) { if (c[0]) chips.appendChild(el("span", "chip " + c[1], esc(c[0]))); });
 
     // the current stay = the last receipt and every relocation after it (none while the spool is on the way)
     var lastRecv = -1, lastDisp = -1;
     T.steps.forEach(function (s, i) { if (s.kind === "recv") lastRecv = i; if (s.kind === "disp") lastDisp = i; });
-    var stayFrom = lastRecv > lastDisp ? lastRecv : -1;
+    var stayFrom = lastRecv > lastDisp ? lastRecv : (lastDisp < 0 && T.steps.length ? 0 : -1);   // never dispatched: all its yard moves are the current stay
     var pos = function (s) { return s.lat != null && s.lng != null; };
 
     var map = L.map("map", { zoomControl: true, attributionControl: true }).setView([24.4, 54.5], 11);
@@ -172,7 +172,7 @@ body { background:var(--bg); color:var(--ink); font:15px/1.45 var(--body); }
       if (!byTrip[s.trip]) {
         var d = T.steps.filter(function (x) { return x.trip === s.trip && x.kind === "disp"; })[0];
         var sec = el("section", "trip" + (s.trip === curTrip ? " cur" : ""));
-        sec.appendChild(el("h3", "", "Trip " + s.trip + " · <b>" + esc(s.dn) + "</b> " + (d ? esc(d.place) + " → " + esc(d.to) : "→ " + esc(s.to))));
+        sec.appendChild(el("h3", "", s.trip === 0 ? "In the yard · <b>moves before any delivery</b>" : "Trip " + s.trip + " · <b>" + esc(s.dn) + "</b> " + (d ? esc(d.place) + " → " + esc(d.to) : "→ " + esc(s.to))));
         list.appendChild(sec); byTrip[s.trip] = sec;
       }
       var row = el("div", "step");
