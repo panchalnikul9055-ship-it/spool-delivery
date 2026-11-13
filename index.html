@@ -873,7 +873,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocate spools" }));
-      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools already received at NMDC (MFY) or NMDC (NEMY) that have been moved to another spot in the yard. Scan each spool where it now lies: its location is recorded the moment it is scanned, so spools in different spots can be scanned in one round. No waybill is made for a relocation." }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "For spools moved to another spot in the yard. Scan each spool where it now lies: its location is recorded the moment it is scanned, so spools in different spots can be scanned in one round. No waybill is made for a relocation." }));
       c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
       return;
     } else {
@@ -1052,7 +1052,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       var rl = el("dl", { cls: "kv" });
       [["Spools", String(items.length)], ["Relocated by", me.name + " · " + me.email]].forEach(function (r) { rl.appendChild(el("dt", { text: r[0] })); rl.appendChild(el("dd", { text: r[1] })); });
       c.appendChild(rl);
-      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool gets this spot as its new position in the yard. Spools that are not received at an NMDC yard are refused and listed after saving." }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool is saved with the spot where it was scanned (or this spot if it had no location yet). Every spool is recorded, whatever its status. The Yard Relocations register keeps one row per spool with its latest position." }));
     } else {
       var h = draft.header, dl = el("dl", { cls: "kv" });
       [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Second receiver", h.receiver2Name ? h.receiver2Name + " · " + h.receiver2Email : "—"], ["Spools loaded", String(items.length)]]
