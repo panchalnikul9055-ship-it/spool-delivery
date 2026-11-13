@@ -273,6 +273,13 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   <!-- 6. Review and submit -->
   <section id="vReview" hidden>
     <div class="card" id="reviewSummary"></div>
+    <div class="card" id="transportCard" hidden>
+      <h2>Transport (for the Way Bill)</h2>
+      <label class="f">Truck No.<input type="text" id="tTruck" autocomplete="off" list="truckList" maxlength="30" placeholder="e.g. AD 3 45821"></label>
+      <label class="f">Driver's name<input type="text" id="tDriver" autocomplete="off" list="driverList" maxlength="60" placeholder="Driver's full name"></label>
+      <datalist id="truckList"></datalist><datalist id="driverList"></datalist>
+      <p class="who" style="margin:0">Both are printed on the Way Bill.</p>
+    </div>
     <div class="card">
       <h2>Proof (optional)</h2>
       <button class="btn" id="proofBtn" type="button">Add photo of the spools / trailer</button>
@@ -1043,6 +1050,15 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("rRemarks").placeholder = "Anything the receiver should know";
     }
     $("rRemarksWrap").hidden = draft.mode !== "receive";
+    var isDispatch = draft.mode !== "receive" && draft.mode !== "relocate";
+    $("transportCard").hidden = !isDispatch;
+    if (isDispatch) {
+      $("tTruck").value = draft.truckNo || ""; $("tDriver").value = draft.driverName || "";
+      [["truckList", "sd-trucks"], ["driverList", "sd-drivers"]].forEach(function (x) {
+        var dl = $(x[0]); dl.textContent = "";
+        (load(x[1]) || []).forEach(function (v) { var o = document.createElement("option"); o.value = v; dl.appendChild(o); });
+      });
+    }
     $("proofBtn").parentNode.querySelector("h2").textContent = draft.mode === "relocate" ? "Location" : "Proof (optional)";
     $("proofBtn").hidden = draft.mode === "relocate";
     proofData = draft.mode === "relocate" ? "" : (draft.proof || ""); $("proofPrev").hidden = !proofData; if (proofData) $("proofPrev").src = proofData;
@@ -1124,7 +1140,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   /* ---------- email sent from the person's own mailbox ---------- */
   function mailHref(m, withList) {
     var body = m.intro + (withList && m.lines && m.lines.length ? "\n\n" + m.listTitle + "\n" + m.lines.join("\n") :
-      (m.lines && m.lines.length ? "\n\n(" + m.lines.length + " spools – please refer to the Excel file listed below for the complete list.)" : "")) + "\n\n" + m.outro;
+      (m.lines && m.lines.length ? "\n\n(" + m.lines.length + " spools – the complete list is in the document linked below.)" : "")) + "\n\n" + m.outro;
     var enc = function (x) { return encodeURIComponent(x).replace(/%2C/g, ",").replace(/%40/g, "@"); };
     return { text: "To: " + m.to + (m.cc ? "\nCc: " + m.cc : "") + "\nSubject: " + m.subject + "\n\n" + body,
       href: "mailto:" + enc(m.to) + "?" + (m.cc ? "cc=" + enc(m.cc) + "&" : "") + "subject=" + encodeURIComponent(m.subject) + "&body=" + encodeURIComponent(body) };
@@ -1141,7 +1157,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     var a = el("a", { cls: "sendmail", href: mail.href, target: "_blank", rel: "noopener" }, ["✉  Send email"]);
     box.appendChild(a);
     var links = el("div", { cls: "links" });
-    if (m.excelUrl) links.appendChild(el("a", { cls: "btn", href: m.excelUrl, target: "_blank", rel: "noopener", text: "Open Excel file" }));
+    if (m.excelUrl) links.appendChild(el("a", { cls: "btn", href: m.excelUrl, target: "_blank", rel: "noopener", text: m.docLabel || "Open Excel file" }));
     var copy = el("button", { cls: "btn", type: "button", text: "Copy email text" });
     copy.addEventListener("click", function () {
       var ok = function () { setStatus("ok", "Email text copied. Paste it into a new email."); };
@@ -1156,6 +1172,14 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function submit() {
     if (busy) return;
     if (!gps) { setStatus("bad", "Location is required. Wait until the location is recorded" + ($("gpsHelp").hidden ? "." : " — see the steps below.")); if (gpsWatch == null && $("gpsHelp").hidden) getGps(); return; }
+    if (draft.mode !== "receive" && draft.mode !== "relocate") {
+      var truckNo = $("tTruck").value.trim(), driverName = $("tDriver").value.trim();
+      if (!truckNo || !driverName) { setStatus("bad", "Enter the truck number and the driver's name. Both are printed on the Way Bill."); $(truckNo ? "tDriver" : "tTruck").focus(); return; }
+      draft.truckNo = truckNo; draft.driverName = driverName; saveDraft();
+      [["sd-trucks", truckNo], ["sd-drivers", driverName]].forEach(function (x) {
+        var a = (load(x[0]) || []).filter(function (v) { return v.toLowerCase() !== x[1].toLowerCase(); }); a.unshift(x[1]); store(x[0], a.slice(0, 15));
+      });
+    }
     busy = true; var btn = $("nextBtn"), label = btn.textContent;
     btn.disabled = true; btn.textContent = ""; btn.appendChild(el("span", { cls: "spin" })); btn.appendChild(document.createTextNode(" Sending…"));
     var done = function () { busy = false; btn.disabled = false; btn.textContent = label; };
@@ -1167,7 +1191,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     } else {
       var h = draft.header;
       call = server("createDelivery", { ref: draft.ref, project: h.project, from: h.from, to: h.to, purpose: h.purpose, senderName: me.name, senderEmail: me.email,
-        receiverName: h.receiverName, receiverEmail: h.receiverEmail, receiver2Name: h.receiver2Name || "", receiver2Email: h.receiver2Email || "", remarks: h.remarks, spools: draft.items, photo: proofData, gps: gps });
+        receiverName: h.receiverName, receiverEmail: h.receiverEmail, receiver2Name: h.receiver2Name || "", receiver2Email: h.receiver2Email || "", remarks: h.remarks, truckNo: draft.truckNo || "", driverName: draft.driverName || "", spools: draft.items, photo: proofData, gps: gps });
     }
     call.then(function (res) {
       done();
