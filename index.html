@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "14";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "15";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -220,11 +220,13 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <label class="f">Delivered by
         <input id="dBy" readonly></label>
       <label class="f">Delivering to (receiver) <span class="req">*</span><select id="dRecv"></select></label>
+      <label class="f" id="dRecvMailRow" hidden>Receiver email <small>(from the Users tab)</small><input id="dRecvMail" readonly tabindex="-1"></label>
       <div id="dRecvOther" class="row2" hidden>
         <label class="f">Receiver name <span class="req">*</span><input id="dRecvName"></label>
         <label class="f">Receiver email <span class="req">*</span><input id="dRecvEmail" type="email" inputmode="email"></label>
       </div>
       <label class="f">Second receiver (optional)<select id="dRecv2"></select></label>
+      <label class="f" id="dRecv2MailRow" hidden>Second receiver email <small>(from the Users tab)</small><input id="dRecv2Mail" readonly tabindex="-1"></label>
       <div id="dRecv2Other" class="row2" hidden>
         <label class="f">Second receiver name <span class="req">*</span><input id="dRecv2Name"></label>
         <label class="f">Second receiver email <span class="req">*</span><input id="dRecv2Email" type="email" inputmode="email"></label>
@@ -760,8 +762,15 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     var dl = $("peopleNames"); dl.textContent = "";
     cfg.people.forEach(function (p) { dl.appendChild(el("option", { value: p.name })); });
   }
-  $("dRecv").addEventListener("change", function () { $("dRecvOther").hidden = $("dRecv").value !== "other"; });
-  $("dRecv2").addEventListener("change", function () { $("dRecv2Other").hidden = $("dRecv2").value !== "other"; });
+  // picking a name fills in that person's email automatically (shown read-only under the drop-down)
+  function showRecvMail() {
+    [["dRecv", "dRecvMailRow", "dRecvMail"], ["dRecv2", "dRecv2MailRow", "dRecv2Mail"]].forEach(function (x) {
+      var v = $(x[0]).value, p = v !== "" && v !== "other" ? cfg.people[+v] : null;
+      $(x[1]).hidden = !p; $(x[2]).value = p ? p.email : "";
+    });
+  }
+  $("dRecv").addEventListener("change", function () { $("dRecvOther").hidden = $("dRecv").value !== "other"; showRecvMail(); });
+  $("dRecv2").addEventListener("change", function () { $("dRecv2Other").hidden = $("dRecv2").value !== "other"; showRecvMail(); });
 
   function startDispatch() {
     clearStatus();
@@ -786,6 +795,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("dRemarks").value = ""; $("dRecv").value = ""; $("dRecvOther").hidden = true; $("dRecvName").value = ""; $("dRecvEmail").value = "";
       $("dRecv2").value = ""; $("dRecv2Other").hidden = true; $("dRecv2Name").value = ""; $("dRecv2Email").value = "";
     }
+    showRecvMail();
     show("vDispatch");
   }
   function readHeader() {
