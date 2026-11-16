@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "13";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "14";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -947,7 +947,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     draft.items = draft.items.filter(function (x) { return x.spool !== s; }); saveDraft(); renderScan(); setStatus("warn", "Removed", s);
   });
   function add(raw) {
-    var spool = String(raw || "").trim();
+    var parts = String(raw || "").split("|"), spool = parts[0].trim(), log = parts.slice(1).join("|").trim();   // QR may read "SPOOL|LOG NO"
     if (!spool || !draft) return false;
     if (isLocked(spool)) { setStatus("warn", "Already confirmed earlier — locked, not counted again:", spool); return false; }
     if (draft.items.some(function (x) { return x.spool.toUpperCase() === spool.toUpperCase(); })) { setStatus("warn", "Already scanned, skipped:", spool); return false; }
@@ -955,6 +955,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     var hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === spool.toUpperCase(); })[0];
     if (hit) spool = hit[0];
     var item = { spool: spool, ts: Date.now() };
+    if (log) item.log = log;
     if (draft.mode === "relocate" && scanFix && Date.now() - scanFix.t < 60000) item.gps = { lat: scanFix.lat, lng: scanFix.lng, acc: scanFix.acc };
     if (draft.mode === "relocate") { item.project = draft.project; item.yard = draft.yard; }   // each spool keeps its own Project No and Yard
     draft.items.push(item); lastAdded = spool; saveDraft(); renderScan();
@@ -1043,7 +1044,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       o.frequency.value = good ? 1200 : 500; g.gain.value = 0.15; o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.14);
     } catch (e) {}
   }
-  function addScanned(txt) { if (add(txt)) feedback(onDn(String(txt).trim())); }
+  function addScanned(txt) { if (add(txt)) feedback(onDn(String(txt).split("|")[0].trim())); }
 
   /* ---------- live camera ---------- */
   var video = $("video"), camBox = $("camBox"), stream = null, running = false, detector = null, lastText = "", lastTime = 0;
@@ -1077,7 +1078,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         var now = Date.now();
         if (!(txt === lastText && now - lastTime < 2500)) {
           lastText = txt; lastTime = now;
-          if (add(txt)) { feedback(onDn(txt.trim())); camBox.classList.add("hit"); setTimeout(function () { camBox.classList.remove("hit"); }, 500); }
+          if (add(txt)) { feedback(onDn(txt.split("|")[0].trim())); camBox.classList.add("hit"); setTimeout(function () { camBox.classList.remove("hit"); }, 500); }
         }
       }
     }
