@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "15";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "16";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -225,11 +225,11 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         <label class="f">Receiver name <span class="req">*</span><input id="dRecvName"></label>
         <label class="f">Receiver email <span class="req">*</span><input id="dRecvEmail" type="email" inputmode="email"></label>
       </div>
-      <label class="f">Second receiver (optional)<select id="dRecv2"></select></label>
-      <label class="f" id="dRecv2MailRow" hidden>Second receiver email <small>(from the Users tab)</small><input id="dRecv2Mail" readonly tabindex="-1"></label>
+      <label class="f">Engineer (second receiver, optional)<select id="dRecv2"></select></label>
+      <label class="f" id="dRecv2MailRow" hidden>Engineer email <small>(from the Users tab)</small><input id="dRecv2Mail" readonly tabindex="-1"></label>
       <div id="dRecv2Other" class="row2" hidden>
-        <label class="f">Second receiver name <span class="req">*</span><input id="dRecv2Name"></label>
-        <label class="f">Second receiver email <span class="req">*</span><input id="dRecv2Email" type="email" inputmode="email"></label>
+        <label class="f">Engineer name <span class="req">*</span><input id="dRecv2Name"></label>
+        <label class="f">Engineer email <span class="req">*</span><input id="dRecv2Email" type="email" inputmode="email"></label>
       </div>
       <label class="f">Remarks (optional)<textarea id="dRemarks" rows="2"></textarea></label>
     </div>
@@ -756,7 +756,11 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     [["dRecv", "Select receiver…"], ["dRecv2", "None"]].forEach(function (x) {
       var sel = $(x[0]); sel.textContent = "";
       sel.appendChild(el("option", { value: "", text: x[1] }));
-      cfg.people.forEach(function (p, i) { if (p.email) sel.appendChild(el("option", { value: String(i), text: p.name })); });
+      // Users tab Role column: Engineers go in the second (engineer) drop-down, everyone else in the receiver drop-down.
+      // If no one has that role yet, the list shows everyone.
+      var isEng = function (p) { return /engineer/i.test(p.role || ""); }, two = x[0] === "dRecv2";
+      var any = cfg.people.some(function (p) { return p.email && (two ? isEng(p) : !isEng(p)); });
+      cfg.people.forEach(function (p, i) { if (p.email && (!any || (two ? isEng(p) : !isEng(p)))) sel.appendChild(el("option", { value: String(i), text: p.name })); });
       sel.appendChild(el("option", { value: "other", text: "Someone else (type name & email)" }));
     });
     var dl = $("peopleNames"); dl.textContent = "";
@@ -813,9 +817,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (r2 === "other") { h.receiver2Name = $("dRecv2Name").value.trim(); h.receiver2Email = $("dRecv2Email").value.trim(); }
     else if (r2 !== "") { h.receiver2Name = cfg.people[+r2].name; h.receiver2Email = cfg.people[+r2].email; }
     if (r2 !== "") {
-      if (!h.receiver2Name) { setStatus("bad", "Enter the second receiver's name, or choose None."); return null; }
-      if (!isEmail(h.receiver2Email)) { setStatus("bad", "Second receiver email is not valid."); return null; }
-      if (h.receiver2Email.toLowerCase() === h.receiverEmail.toLowerCase()) { setStatus("bad", "The second receiver is the same as the first. Choose someone else or None."); return null; }
+      if (!h.receiver2Name) { setStatus("bad", "Enter the engineer's name, or choose None."); return null; }
+      if (!isEmail(h.receiver2Email)) { setStatus("bad", "Engineer email is not valid."); return null; }
+      if (h.receiver2Email.toLowerCase() === h.receiverEmail.toLowerCase()) { setStatus("bad", "The engineer is the same as the receiver. Choose someone else or None."); return null; }
     }
     if (h.from === h.to) { setStatus("bad", "From and To can't be the same location."); return null; }
     return h;
@@ -1167,7 +1171,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool is saved with the spot where it was scanned (or this spot if it had no location yet). Every spool is recorded, whatever its status. The Movements tab keeps one row per spool with its latest position." }));
     } else {
       var h = draft.header, dl = el("dl", { cls: "kv" });
-      [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Second receiver", h.receiver2Name ? h.receiver2Name + " · " + h.receiver2Email : "—"], ["Spools loaded", String(items.length)]]
+      [["Project", h.project], ["From → To", h.from + " → " + h.to], ["Purpose", h.purpose], ["Delivered by", me.name], ["Delivering to", h.receiverName + " · " + h.receiverEmail], ["Engineer", h.receiver2Name ? h.receiver2Name + " · " + h.receiver2Email : "—"], ["Spools loaded", String(items.length)]]
         .forEach(function (r) { dl.appendChild(el("dt", { text: r[0] })); dl.appendChild(el("dd", { text: r[1] })); });
       c.appendChild(el("h2", { text: "Delivery summary" })); c.appendChild(dl);
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Check the details, then tap Send delivery. The receiver gets an email with the list and a link to confirm receipt." }));
