@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "16";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "17";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -48,6 +48,7 @@ h2::before { content:""; width:22px; height:3px; background:var(--accent); flex:
   padding:20px 16px; display:flex; align-items:center; justify-content:center; gap:12px; box-shadow:0 2px 6px rgba(48,169,225,.35); }
 .big.dark { background:var(--black); color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.25); }
 .big.relo { background:#e8743b; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.2); }
+.big.erect { background:#1e9a4b; color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.2); }
 .big.waitgps { opacity:.55; }
 .gpshelp { border:2px solid var(--bad); border-radius:8px; padding:10px 12px; background:var(--bad-bg); color:var(--ink); display:grid; gap:6px; font-size:14px; }
 .gpshelp b { color:var(--bad); } .gpshelp ol { margin:0; padding-left:20px; display:grid; gap:2px; }
@@ -204,6 +205,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       <button class="big relo" id="goRelocate" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
         Relocate spools</button>
+      <button class="big erect" id="goErect" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21h16M6 21V9l6-5 6 5v12M9 21v-6h6v6"/><path d="M9.5 11.5l2 2 3.5-3.5"/></svg>
+        Update spool erection</button>
     </div>
   </section>
 
@@ -412,6 +416,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
     function label(fn, a) {
       if (fn === "createDelivery") return "Dispatch " + a.from + " → " + a.to + " · " + (a.spools || []).length + " spools";
+      if (fn === "erectSpools") return "Erection · " + (a.location || "") + (a.project ? " · Project " + a.project : "") + " · " + (a.spools || []).length + " spools";
       if (fn === "relocateSpools") return "Relocation · " + (a.yard || "NMDC yard") + (a.project ? " · Project " + a.project : "") + " · " + (a.spools || []).length + " spools";
       return "Receipt " + a.dn + " · " + (a.spools || []).length + " spools";
     }
@@ -467,7 +472,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
           usedSaved = true; pill(); return d;
         });
       }
-      if (fn === "createDelivery" || fn === "confirmReceipt" || fn === "relocateSpools") {
+      if (fn === "createDelivery" || fn === "confirmReceipt" || fn === "relocateSpools" || fn === "erectSpools") {
         if (navigator.onLine === false) return Promise.resolve(enqueue(fn, args));
         return post(fn, args, 60000).then(function (r) { refreshBundle().catch(function () {}); return r; })
           .catch(function (e) { if (e.server) throw e; return enqueue(fn, args); });
@@ -513,12 +518,12 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       q.forEach(function (i) {
         var row = el("div", { cls: "obx " + i.state });
         var head = i.state === "sent" ? "✓ Sent" + (i.result && i.result.dn ? " · " + i.result.dn : "") +
-          (i.fn === "relocateSpools" && i.result ? " · " + (i.result.relocated || []).length + " relocated" : "") : i.state === "error" ? "⚠ Not accepted" : "⏳ Waiting for signal";
+          (i.fn === "relocateSpools" && i.result ? " · " + (i.result.relocated || []).length + " relocated" : "") + (i.fn === "erectSpools" && i.result ? " · " + (i.result.erected || []).length + " erected" : "") : i.state === "error" ? "⚠ Not accepted" : "⏳ Waiting for signal";
         row.appendChild(el("b", { text: head }));
         row.appendChild(el("div", { text: i.label }));
         row.appendChild(el("small", { text: "Saved " + fmt(i.at) + (i.photoDropped ? " · photo not kept (phone storage full)" : "") }));
         if (i.state === "error") row.appendChild(el("small", { cls: "err", text: i.error }));
-        if (i.state === "sent" && i.fn === "relocateSpools" && i.result && (i.result.rejected || []).length)
+        if (i.state === "sent" && (i.fn === "relocateSpools" || i.fn === "erectSpools") && i.result && (i.result.rejected || []).length)
           i.result.rejected.forEach(function (x) { row.appendChild(el("small", { cls: "err", text: "Refused " + x.spool + ": " + x.reason })); });
         var acts = el("div", { cls: "links" });
         if (i.state === "sent" && i.result && i.result.mail && !i.result.mail.error) {
@@ -671,24 +676,26 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function show(v) {
     view = v;
     if (v !== "vReview") stopGps();
-    if (v === "vScan" && draft && draft.mode === "relocate") startScanGps(); else stopScanGps();
+    if (v === "vScan" && yardMode(draft)) startScanGps(); else stopScanGps();
     if (v === "vScan") { try { fillSpoolOpts(); } catch (e) {} }
     ["vProfile", "vHome", "vDispatch", "vReceiveList", "vScan", "vReview", "vDone"].forEach(function (id) { $(id).hidden = id !== v; });
-    var M = draft && draft.mode, RL = M === "relocate";
-    var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", M === "receive" ? "Review receipt" : RL ? "Review relocation" : "Confirm and Send"],
-      vReview: ["Keep scanning", M === "receive" ? "Confirm receipt" : RL ? "Save relocation" : "Send delivery"], vReceiveList: ["Back", null] }[v];
+    var M = draft && draft.mode, ER = M === "erect", RL = M === "relocate" || ER;
+    var bar = { vDispatch: ["Back", "Start scanning"], vScan: ["Back", M === "receive" ? "Review receipt" : ER ? "Review erection" : RL ? "Review relocation" : "Confirm and Send"],
+      vReview: ["Keep scanning", M === "receive" ? "Confirm receipt" : ER ? "Save erection" : RL ? "Save relocation" : "Send delivery"], vReceiveList: ["Back", null] }[v];
     $("bar").hidden = !bar;
     if (bar) { $("backBtn").textContent = bar[0]; $("nextBtn").hidden = !bar[1]; if (bar[1]) $("nextBtn").textContent = bar[1]; }
     $("clearConfirm").hidden = true;
     $("countBox").hidden = !(v === "vScan" || v === "vReview");
     var t = { vProfile: ["Spool delivery tracking", "Welcome"], vHome: ["Home", "Spool Delivery Tracking"], vDispatch: ["Dispatch", "New delivery"],
-      vReceiveList: ["Receive", "Receive spools"], vScan: [M === "receive" ? "Receive · " + draft.delivery.dn : RL ? "Relocate in NMDC yard" : "Dispatch · loading", "Scan spools"],
-      vReview: [M === "receive" ? "Receive · " + draft.delivery.dn : RL ? "Relocate in NMDC yard" : "Dispatch", M === "receive" || RL ? "Check & submit" : "Check & send"], vDone: ["Spool delivery tracking", "Done"] }[v];
+      vReceiveList: ["Receive", "Receive spools"], vScan: [M === "receive" ? "Receive · " + draft.delivery.dn : ER ? "Update spool erection" : RL ? "Relocate in NMDC yard" : "Dispatch · loading", "Scan spools"],
+      vReview: [M === "receive" ? "Receive · " + draft.delivery.dn : ER ? "Update spool erection" : RL ? "Relocate in NMDC yard" : "Dispatch", M === "receive" || RL ? "Check & submit" : "Check & send"], vDone: ["Spool delivery tracking", "Done"] }[v];
     $("eyebrow").textContent = t[0]; $("title").textContent = t[1];
     if (v !== "vScan") stopLive();
     window.scrollTo(0, 0);
   }
 
+  // Relocation and erection share the yard scanning screen (Project No + location, GPS per scan)
+  function yardMode(d) { return !!d && (d.mode === "relocate" || d.mode === "erect"); }
   function goHome() {
     clearStatus();
     OFF.renderOutbox(); OFF.pill(); OFF.installCard(); OFF.pushCard();
@@ -696,7 +703,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     $("meName").textContent = me.name;
     $("draftCard").hidden = !(draft && draft.items && draft.items.length);
     if (draft && draft.items && draft.items.length) {
-      $("draftText").textContent = (draft.mode === "receive" ? "Receiving " + draft.delivery.dn : draft.mode === "relocate" ? "Relocation" : "Dispatch " + draft.header.from + " → " + draft.header.to) +
+      $("draftText").textContent = (draft.mode === "receive" ? "Receiving " + draft.delivery.dn : draft.mode === "erect" ? "Erection update" : draft.mode === "relocate" ? "Relocation" : "Dispatch " + draft.header.from + " → " + draft.header.to) +
         " — " + draft.items.length + " spool" + (draft.items.length === 1 ? "" : "s") + " scanned.";
     }
     show("vHome");
@@ -871,7 +878,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         if (draft.items.length < before) setStatus("warn", (before - draft.items.length) + " of your scanned spool(s) were confirmed by someone else meanwhile and are now locked.");
         return;
       }
-      if (draft && draft.items && draft.items.length && !confirm("You have an unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : draft.mode === "relocate" ? "relocation" : "dispatch") + ". Discard it and open " + d.dn + "?")) { goHome(); return; }
+      if (draft && draft.items && draft.items.length && !confirm("You have an unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : draft.mode === "erect" ? "erection update" : draft.mode === "relocate" ? "relocation" : "dispatch") + ". Discard it and open " + d.dn + "?")) { goHome(); return; }
       draft = { mode: "receive", ref: uid(), delivery: d, items: [] }; saveDraft();
       clearStatus(); show("vScan"); renderScan();
     }).catch(function (e) { setStatus("bad", friendly(e)); });
@@ -896,6 +903,25 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       rows = [["DN No", d.dn], ["From → To", d.from + " → " + d.to], ["Purpose", d.purpose], ["Sent by", d.senderName + " · " + d.dispatchedAt], ["Spools sent", String(d.sent.length)]];
       if (d.received.length) rows.push(["Already confirmed", d.received.length + " (locked) · " + (d.sent.length - d.received.length) + " balance to scan"]);
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
+    } else if (draft.mode === "erect") {
+      c.appendChild(el("h2", { text: "Update spool erection" }));
+      var locsE = (cfg && cfg.locations) || [], projsE = (cfg && cfg.projects) || [];
+      if (!draft.project && projsE.indexOf(load("sd-erect-project")) >= 0) draft.project = load("sd-erect-project");
+      if (!draft.yard && locsE.indexOf(load("sd-erect-location")) >= 0) draft.yard = load("sd-erect-location");
+      var pickE = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
+      [["Project No", "erectProject", projsE, draft.project, "project", "sd-erect-project"], ["Erection location", "erectLocation", locsE, draft.yard, "yard", "sd-erect-location"]].forEach(function (f) {
+        var lab = el("label", { cls: "f" }); lab.appendChild(document.createTextNode(f[0]));
+        var s = el("select", { id: f[1] }); s.appendChild(el("option", { value: "", text: "Select…" }));
+        f[2].forEach(function (v) { s.appendChild(el("option", { value: v, text: v })); });
+        s.value = f[3] || "";
+        s.addEventListener("change", function () { draft[f[4]] = s.value; store(f[5], s.value); saveDraft(); renderScan(); });
+        lab.appendChild(s); pickE.appendChild(lab);
+      });
+      c.appendChild(pickE);
+      if (!(draft.project && draft.yard)) c.appendChild(el("p", { cls: "who", style: "margin:0 0 8px;font-weight:700;color:var(--warn)", text: "Select the Project No and the Erection location first. The scanner opens once both are chosen." }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Scan each spool once it is erected. Its module comes from the Spool List; the register records it as Erected with this location, the time, your name and the GPS position. Spools already erected are refused." }));
+      c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
+      return;
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocate spools" }));
       var yards = ((cfg && cfg.locations) || []).filter(function (l) { return /^NMDC\s*\(\s*(MFY|NEMY)\s*\)$/i.test(l); });
@@ -928,7 +954,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function renderScan() {
     renderTrip();
     // Relocation: the scanner opens only once the Project No and the Yard are chosen
-    var gate = draft.mode === "relocate" && !(draft.project && draft.yard);
+    var gate = yardMode(draft) && !(draft.project && draft.yard);
     $("scanControls").hidden = gate;
     if (gate) { try { stopLive(); } catch (e) {} }
     var items = draft.items, recv = draft.mode === "receive";
@@ -943,14 +969,14 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         el("div", { cls: "spool" }, [el("code", { text: s.spool }), el("small", { text: (extra ? "Not on DN · " : "") + s.time })]),
         el("span", { cls: "lock", title: "Locked", text: "🔒" })]));
     });
-    $("countLabel").textContent = recv ? "Received" : draft.mode === "relocate" ? "Scanned" : "Loaded";
+    $("countLabel").textContent = recv ? "Received" : draft.mode === "erect" ? "Erected" : yardMode(draft) ? "Scanned" : "Loaded";
     $("empty").hidden = items.length > 0; $("log").hidden = items.length === 0; $("clearBtn").hidden = items.length === 0;
     var log = $("log"); log.textContent = "";
     for (var i = items.length - 1; i >= 0; i--) {
       var it = items[i], ok = onDn(it.spool);
       var li = el("li", { cls: (it.spool === lastAdded ? "fresh " : "") + (ok ? "" : "extra") }, [
         el("span", { cls: "idx", text: p2(i + 1) }),
-        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) + (it.gps ? " · 📍 ±" + Math.round(it.gps.acc) + " m" : draft.mode === "relocate" ? " · 📍 at save point" : "") + (draft.mode === "relocate" && it.yard ? " · " + it.project + " · " + it.yard : "") }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
+        el("div", { cls: "spool" }, [el("code", { text: it.spool }), el("small", { text: fmt(it.ts) + (it.gps ? " · 📍 ±" + Math.round(it.gps.acc) + " m" : yardMode(draft) ? " · 📍 at save point" : "") + (yardMode(draft) && it.yard ? " · " + it.project + " · " + it.yard : "") }), recv && !ok ? el("span", { cls: "tag warn", text: " Not on this DN" }) : null]),
         el("button", { cls: "del", type: "button", "aria-label": "Remove " + it.spool, "data-spool": it.spool, text: "×" })
       ]);
       log.appendChild(li);
@@ -965,13 +991,13 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!spool || !draft) return false;
     if (isLocked(spool)) { setStatus("warn", "Already confirmed earlier — locked, not counted again:", spool); return false; }
     if (draft.items.some(function (x) { return x.spool.toUpperCase() === spool.toUpperCase(); })) { setStatus("warn", "Already scanned, skipped:", spool); return false; }
-    if (draft.mode === "relocate" && !(draft.project && draft.yard)) { setStatus("bad", "Select the Project No and the Yard first."); return false; }
+    if (yardMode(draft) && !(draft.project && draft.yard)) { setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Erection location first." : "Select the Project No and the Yard first."); return false; }
     var hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === spool.toUpperCase(); })[0];
     if (hit) spool = hit[0];
     var item = { spool: spool, ts: Date.now() };
     if (log) item.log = log;
-    if (draft.mode === "relocate" && scanFix && Date.now() - scanFix.t < 60000) item.gps = { lat: scanFix.lat, lng: scanFix.lng, acc: scanFix.acc };
-    if (draft.mode === "relocate") { item.project = draft.project; item.yard = draft.yard; }   // each spool keeps its own Project No and Yard
+    if (yardMode(draft) && scanFix && Date.now() - scanFix.t < 60000) item.gps = { lat: scanFix.lat, lng: scanFix.lng, acc: scanFix.acc };
+    if (yardMode(draft)) { item.project = draft.project; item.yard = draft.yard; }   // each spool keeps its own Project No and Yard
     draft.items.push(item); lastAdded = spool; saveDraft(); renderScan();
     if (onDn(spool)) setStatus("ok", "Added #" + draft.items.length + ":", spool);
     else setStatus("warn", "Not on this delivery note — added as extra:", spool);
@@ -1163,6 +1189,12 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       }
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Received by: " + me.name + " · " + me.email }));
       $("rRemarks").placeholder = "e.g. one spool with damaged coating";
+    } else if (draft.mode === "erect") {
+      c.appendChild(el("h2", { text: "Erection update" }));
+      var el2 = el("dl", { cls: "kv" });
+      [["Project No", draft.project || "—"], ["Erection location", draft.yard || "—"], ["Spools erected", String(items.length)], ["Updated by", me.name + " · " + me.email]].forEach(function (r) { el2.appendChild(el("dt", { text: r[0] })); el2.appendChild(el("dd", { text: r[1] })); });
+      c.appendChild(el2);
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool is recorded as Erected at this location with its module, the time and the GPS position. The Movements tab shows the erection status and the Erection Progress tab counts erected spools per module." }));
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocation" }));
       var rl = el("dl", { cls: "kv" });
@@ -1178,7 +1210,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("rRemarks").placeholder = "Anything the receiver should know";
     }
     $("rRemarksWrap").hidden = draft.mode !== "receive";
-    var isDispatch = draft.mode !== "receive" && draft.mode !== "relocate";
+    var isDispatch = draft.mode !== "receive" && !yardMode(draft);
     $("transportCard").hidden = !isDispatch;
     if (isDispatch) {
       $("tTruck").value = draft.truckNo || ""; $("tDriver").value = draft.driverName || "";
@@ -1187,9 +1219,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         (load(x[1]) || []).forEach(function (v) { var o = document.createElement("option"); o.value = v; dl.appendChild(o); });
       });
     }
-    $("proofBtn").parentNode.querySelector("h2").textContent = draft.mode === "relocate" ? "Location" : "Proof (optional)";
-    $("proofBtn").hidden = draft.mode === "relocate";
-    proofData = draft.mode === "relocate" ? "" : (draft.proof || ""); $("proofPrev").hidden = !proofData; if (proofData) $("proofPrev").src = proofData;
+    $("proofBtn").parentNode.querySelector("h2").textContent = yardMode(draft) ? "Location" : "Proof (optional)";
+    $("proofBtn").hidden = yardMode(draft);
+    proofData = yardMode(draft) ? "" : (draft.proof || ""); $("proofPrev").hidden = !proofData; if (proofData) $("proofPrev").src = proofData;
     show("vReview");
     getGps();
   }
@@ -1244,7 +1276,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function gpsGate() {
     if (view !== "vReview" || busy) return;
     var b = $("nextBtn"), M = draft && draft.mode;
-    var label = M === "receive" ? "Confirm receipt" : M === "relocate" ? "Save relocation" : "Send delivery";
+    var label = M === "receive" ? "Confirm receipt" : M === "erect" ? "Save erection" : M === "relocate" ? "Save relocation" : "Send delivery";
     b.textContent = gps ? label : "📍 Waiting for location…";
     b.classList.toggle("waitgps", !gps);
   }
@@ -1265,7 +1297,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       : kind === "none" ? ["This browser can't share location. Open the app in Chrome (Android) or Safari (iPhone)."]
       : ["Switch on Location (GPS) in the phone's quick settings.", "Step outside or away from steel structures and tall stacks.", "Tap Try again."];
     h.appendChild(el("b", { text: kind === "denied" ? "Location is blocked for this app" : kind === "none" ? "Location not supported" : "No location yet" }));
-    h.appendChild(el("p", { style: "margin:0", text: "Location is required to " + (draft && draft.mode === "receive" ? "confirm a receipt" : draft && draft.mode === "relocate" ? "relocate spools" : "release spools") + ". Your scans are kept on this phone." }));
+    h.appendChild(el("p", { style: "margin:0", text: "Location is required to " + (draft && draft.mode === "receive" ? "confirm a receipt" : draft && draft.mode === "erect" ? "update spool erection" : draft && draft.mode === "relocate" ? "relocate spools" : "release spools") + ". Your scans are kept on this phone." }));
     var ol = el("ol"); steps.forEach(function (t) { ol.appendChild(el("li", { text: t })); }); h.appendChild(ol);
     if (kind !== "none") { var b = el("button", { cls: "btn primary", type: "button", text: "Try again" }); b.addEventListener("click", function () { getGps(); }); h.appendChild(b); }
     h.hidden = false;
@@ -1341,10 +1373,10 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   function submit() {
     if (busy) return;
     if (!gps) { setStatus("bad", "Location is required. Wait until the location is recorded" + ($("gpsHelp").hidden ? "." : " — see the steps below.")); if (gpsWatch == null && $("gpsHelp").hidden) getGps(); return; }
-    if (draft.mode === "relocate" && (!draft.project || !draft.yard)) {
-      setStatus("bad", "Select the Project No and the Yard on the scanning screen before saving the relocation."); show("vScan"); renderScan(); return;
+    if (yardMode(draft) && (!draft.project || !draft.yard)) {
+      setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Erection location on the scanning screen first." : "Select the Project No and the Yard on the scanning screen before saving the relocation."); show("vScan"); renderScan(); return;
     }
-    if (draft.mode !== "receive" && draft.mode !== "relocate") {
+    if (draft.mode !== "receive" && !yardMode(draft)) {
       var truckNo = $("tTruck").value.trim(), driverName = $("tDriver").value.trim();
       if (!truckNo || !driverName) { setStatus("bad", "Enter the truck number and the driver's name. Both are printed on the Way Bill."); $(truckNo ? "tDriver" : "tTruck").focus(); return; }
       draft.truckNo = truckNo; draft.driverName = driverName; saveDraft();
@@ -1356,7 +1388,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     btn.disabled = true; btn.textContent = ""; btn.appendChild(el("span", { cls: "spin" })); btn.appendChild(document.createTextNode(" Sending…"));
     var done = function () { busy = false; btn.disabled = false; btn.textContent = label; };
     var call;
-    if (draft.mode === "relocate") {
+    if (draft.mode === "erect") {
+      call = server("erectSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps, project: draft.project || "", location: draft.yard || "" });
+    } else if (draft.mode === "relocate") {
       call = server("relocateSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps, project: draft.project || "", yard: draft.yard || "" });
     } else if (draft.mode === "receive") {
       call = server("confirmReceipt", { dn: draft.delivery.dn, ref: draft.ref, receivedBy: me.name, receiverEmail: me.email, spools: draft.items, remarks: $("rRemarks").value.trim(), photo: proofData, gps: gps });
@@ -1373,16 +1407,16 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (res && res.queued) {
         box.appendChild(el("b", { text: "Saved on this phone" }));
         box.appendChild(el("p", { cls: "dn", text: mode === "receive" ? (d && d.dn) : "Waiting for signal" }));
-        box.appendChild(el("p", { text: res.count + " spools · " + (mode === "receive" ? "receipt" : mode === "relocate" ? "relocation" : h.from + " → " + h.to) }));
+        box.appendChild(el("p", { text: res.count + " spools · " + (mode === "receive" ? "receipt" : mode === "erect" ? "erection update" : mode === "relocate" ? "relocation" : h.from + " → " + h.to) }));
         box.appendChild(el("p", { cls: "who", text: "No signal right now. It will be sent to the register automatically as soon as this phone has signal — just open the app again. " +
-          (mode === "relocate" ? "The result" : mode === "receive" ? "The Send email button" : "The delivery note number and the Send email button") + " will then appear in the Outbox on the home screen." }));
+          (mode === "relocate" || mode === "erect" ? "The result" : mode === "receive" ? "The Send email button" : "The delivery note number and the Send email button") + " will then appear in the Outbox on the home screen." }));
         renderMail(null); clearStatus(); show("vDone"); return;
       }
-      if (mode === "relocate") {
-        var okN = (res.relocated || []).length, bad = res.rejected || [];
-        box.appendChild(el("b", { text: res.duplicate ? "Already saved" : okN ? "Relocated" : "Nothing relocated" }));
+      if (mode === "relocate" || mode === "erect") {
+        var ER2 = mode === "erect", okN = ((ER2 ? res.erected : res.relocated) || []).length, bad = res.rejected || [];
+        box.appendChild(el("b", { text: res.duplicate ? "Already saved" : okN ? (ER2 ? "Erection recorded" : "Relocated") : (ER2 ? "Nothing recorded" : "Nothing relocated") }));
         box.appendChild(el("p", { cls: "dn", text: okN + " spool" + (okN === 1 ? "" : "s") }));
-        if (okN) box.appendChild(el("p", { text: "New position saved" + (res.gps ? " · " + res.gps : "") + "." }));
+        if (okN) box.appendChild(el("p", { text: (ER2 ? "Erected at " + (res.location || "") : "New position saved") + (res.gps ? " · " + res.gps : "") + "." }));
         if (bad.length) {
           box.appendChild(el("p", { cls: "status bad", text: bad.length + " refused:" }));
           var ul = el("ol", { cls: "log" });
@@ -1408,7 +1442,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
       }
       if (res.duplicate) box.appendChild(el("p", { cls: "who", text: "(This was already sent earlier — no duplicate was created.)" }));
-      if (mode === "relocate") { renderMail(null); clearStatus(); show("vDone"); return; }
+      if (mode === "relocate" || mode === "erect") { renderMail(null); clearStatus(); show("vDone"); return; }
       renderMail(res.mail, mode === "receive" ? (d && d.senderName) : (h && (h.receiverName + (h.receiver2Name ? " and " + h.receiver2Name : ""))), mode);
       clearStatus(); show("vDone");
     }).catch(function (e) {
@@ -1453,6 +1487,12 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     clearStatus();
     if (draft && draft.items && draft.items.length && draft.mode !== "relocate" && !confirm("Discard the unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : "dispatch") + "?")) return;
     if (!(draft && draft.mode === "relocate")) { draft = { mode: "relocate", ref: uid(), items: [] }; saveDraft(); }
+    show("vScan"); renderScan();
+  });
+  $("goErect").addEventListener("click", function () {
+    clearStatus();
+    if (draft && draft.items && draft.items.length && draft.mode !== "erect" && !confirm("Discard the unfinished " + (draft.mode === "receive" ? "receipt for " + draft.delivery.dn : draft.mode === "relocate" ? "relocation" : "dispatch") + "?")) return;
+    if (!(draft && draft.mode === "erect")) { draft = { mode: "erect", ref: uid(), items: [] }; saveDraft(); }
     show("vScan"); renderScan();
   });
   $("draftResume").addEventListener("click", function () {
