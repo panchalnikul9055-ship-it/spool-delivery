@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "17";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "18";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -905,11 +905,11 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
     } else if (draft.mode === "erect") {
       c.appendChild(el("h2", { text: "Update spool erection" }));
-      var locsE = (cfg && cfg.locations) || [], projsE = (cfg && cfg.projects) || [];
+      var locsE = (cfg && cfg.modules) || [], projsE = (cfg && cfg.projects) || [];
       if (!draft.project && projsE.indexOf(load("sd-erect-project")) >= 0) draft.project = load("sd-erect-project");
-      if (!draft.yard && locsE.indexOf(load("sd-erect-location")) >= 0) draft.yard = load("sd-erect-location");
+      if (!draft.yard && locsE.indexOf(load("sd-erect-module")) >= 0) draft.yard = load("sd-erect-module");
       var pickE = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
-      [["Project No", "erectProject", projsE, draft.project, "project", "sd-erect-project"], ["Erection location", "erectLocation", locsE, draft.yard, "yard", "sd-erect-location"]].forEach(function (f) {
+      [["Project No", "erectProject", projsE, draft.project, "project", "sd-erect-project"], ["Module No", "erectModule", locsE, draft.yard, "yard", "sd-erect-module"]].forEach(function (f) {
         var lab = el("label", { cls: "f" }); lab.appendChild(document.createTextNode(f[0]));
         var s = el("select", { id: f[1] }); s.appendChild(el("option", { value: "", text: "Select…" }));
         f[2].forEach(function (v) { s.appendChild(el("option", { value: v, text: v })); });
@@ -918,8 +918,8 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         lab.appendChild(s); pickE.appendChild(lab);
       });
       c.appendChild(pickE);
-      if (!(draft.project && draft.yard)) c.appendChild(el("p", { cls: "who", style: "margin:0 0 8px;font-weight:700;color:var(--warn)", text: "Select the Project No and the Erection location first. The scanner opens once both are chosen." }));
-      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Scan each spool once it is erected. Its module comes from the Spool List; the register records it as Erected with this location, the time, your name and the GPS position. Spools already erected are refused." }));
+      if (!(draft.project && draft.yard)) c.appendChild(el("p", { cls: "who", style: "margin:0 0 8px;font-weight:700;color:var(--warn)", text: (locsE.length ? "" : "No Module Nos in the Lists tab yet \u2013 add them in the Module No column. ") + "Select the Project No and the Module No first. The scanner opens once both are chosen." }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Scan each spool once it is erected. The register records it as Erected in the selected module with the time, your name and the GPS position. Spools already erected are refused." }));
       c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
       return;
     } else if (draft.mode === "relocate") {
@@ -991,7 +991,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!spool || !draft) return false;
     if (isLocked(spool)) { setStatus("warn", "Already confirmed earlier — locked, not counted again:", spool); return false; }
     if (draft.items.some(function (x) { return x.spool.toUpperCase() === spool.toUpperCase(); })) { setStatus("warn", "Already scanned, skipped:", spool); return false; }
-    if (yardMode(draft) && !(draft.project && draft.yard)) { setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Erection location first." : "Select the Project No and the Yard first."); return false; }
+    if (yardMode(draft) && !(draft.project && draft.yard)) { setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Module No first." : "Select the Project No and the Yard first."); return false; }
     var hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === spool.toUpperCase(); })[0];
     if (hit) spool = hit[0];
     var item = { spool: spool, ts: Date.now() };
@@ -1192,9 +1192,9 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     } else if (draft.mode === "erect") {
       c.appendChild(el("h2", { text: "Erection update" }));
       var el2 = el("dl", { cls: "kv" });
-      [["Project No", draft.project || "—"], ["Erection location", draft.yard || "—"], ["Spools erected", String(items.length)], ["Updated by", me.name + " · " + me.email]].forEach(function (r) { el2.appendChild(el("dt", { text: r[0] })); el2.appendChild(el("dd", { text: r[1] })); });
+      [["Project No", draft.project || "—"], ["Module No", draft.yard || "—"], ["Spools erected", String(items.length)], ["Updated by", me.name + " · " + me.email]].forEach(function (r) { el2.appendChild(el("dt", { text: r[0] })); el2.appendChild(el("dd", { text: r[1] })); });
       c.appendChild(el2);
-      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool is recorded as Erected at this location with its module, the time and the GPS position. The Movements tab shows the erection status and the Erection Progress tab counts erected spools per module." }));
+      c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Each spool is recorded as Erected against this Project No and Module No, with the time and the GPS position. The Erection Status tab lists every spool by Project, Module and Spool No; the Erection Progress tab counts erected spools per module." }));
     } else if (draft.mode === "relocate") {
       c.appendChild(el("h2", { text: "Relocation" }));
       var rl = el("dl", { cls: "kv" });
@@ -1374,7 +1374,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (busy) return;
     if (!gps) { setStatus("bad", "Location is required. Wait until the location is recorded" + ($("gpsHelp").hidden ? "." : " — see the steps below.")); if (gpsWatch == null && $("gpsHelp").hidden) getGps(); return; }
     if (yardMode(draft) && (!draft.project || !draft.yard)) {
-      setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Erection location on the scanning screen first." : "Select the Project No and the Yard on the scanning screen before saving the relocation."); show("vScan"); renderScan(); return;
+      setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Module No on the scanning screen first." : "Select the Project No and the Yard on the scanning screen before saving the relocation."); show("vScan"); renderScan(); return;
     }
     if (draft.mode !== "receive" && !yardMode(draft)) {
       var truckNo = $("tTruck").value.trim(), driverName = $("tDriver").value.trim();
@@ -1389,7 +1389,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     var done = function () { busy = false; btn.disabled = false; btn.textContent = label; };
     var call;
     if (draft.mode === "erect") {
-      call = server("erectSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps, project: draft.project || "", location: draft.yard || "" });
+      call = server("erectSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps, project: draft.project || "", module: draft.yard || "" });
     } else if (draft.mode === "relocate") {
       call = server("relocateSpools", { ref: draft.ref, by: me.name, email: me.email, spools: draft.items, gps: gps, project: draft.project || "", yard: draft.yard || "" });
     } else if (draft.mode === "receive") {
@@ -1416,7 +1416,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         var ER2 = mode === "erect", okN = ((ER2 ? res.erected : res.relocated) || []).length, bad = res.rejected || [];
         box.appendChild(el("b", { text: res.duplicate ? "Already saved" : okN ? (ER2 ? "Erection recorded" : "Relocated") : (ER2 ? "Nothing recorded" : "Nothing relocated") }));
         box.appendChild(el("p", { cls: "dn", text: okN + " spool" + (okN === 1 ? "" : "s") }));
-        if (okN) box.appendChild(el("p", { text: (ER2 ? "Erected at " + (res.location || "") : "New position saved") + (res.gps ? " · " + res.gps : "") + "." }));
+        if (okN) box.appendChild(el("p", { text: (ER2 ? "Erected in Module " + (res.module || res.location || "").replace(/^Module\s+/i, "") : "New position saved") + (res.gps ? " · " + res.gps : "") + "." }));
         if (bad.length) {
           box.appendChild(el("p", { cls: "status bad", text: bad.length + " refused:" }));
           var ul = el("ol", { cls: "log" });
