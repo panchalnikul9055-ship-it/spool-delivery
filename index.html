@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "18";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "19";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -905,8 +905,14 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (d.dispatchRemarks) rows.push(["Remarks", d.dispatchRemarks]);
     } else if (draft.mode === "erect") {
       c.appendChild(el("h2", { text: "Update spool erection" }));
-      var locsE = (cfg && cfg.modules) || [], projsE = (cfg && cfg.projects) || [];
+      var projsE = (cfg && cfg.projects) || [];
       if (!draft.project && projsE.indexOf(load("sd-erect-project")) >= 0) draft.project = load("sd-erect-project");
+      // Module No list follows the selected Project No (Lists tab: Module No + Module Project No; blank project = every project)
+      var normE = function (v) { return String(v || "").replace(/\s+/g, "").toUpperCase(); };
+      var mapE = (cfg && cfg.moduleMap) || null, locsE = !mapE ? ((cfg && cfg.modules) || []) : !draft.project ? [] :
+        mapE.filter(function (x) { return !x.p || normE(x.p) === normE(draft.project); }).map(function (x) { return x.m; })
+          .filter(function (m, i, a) { return a.indexOf(m) === i; });
+      if (draft.yard && locsE.indexOf(draft.yard) < 0) draft.yard = "";
       if (!draft.yard && locsE.indexOf(load("sd-erect-module")) >= 0) draft.yard = load("sd-erect-module");
       var pickE = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
       [["Project No", "erectProject", projsE, draft.project, "project", "sd-erect-project"], ["Module No", "erectModule", locsE, draft.yard, "yard", "sd-erect-module"]].forEach(function (f) {
@@ -918,7 +924,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
         lab.appendChild(s); pickE.appendChild(lab);
       });
       c.appendChild(pickE);
-      if (!(draft.project && draft.yard)) c.appendChild(el("p", { cls: "who", style: "margin:0 0 8px;font-weight:700;color:var(--warn)", text: (locsE.length ? "" : "No Module Nos in the Lists tab yet \u2013 add them in the Module No column. ") + "Select the Project No and the Module No first. The scanner opens once both are chosen." }));
+      if (!(draft.project && draft.yard)) c.appendChild(el("p", { cls: "who", style: "margin:0 0 8px;font-weight:700;color:var(--warn)", text: (draft.project && !locsE.length ? "No Module Nos are listed for project " + draft.project + " in the Lists tab (Module No / Module Project No columns). " : "") + "Select the Project No first, then the Module No. The scanner opens once both are chosen." }));
       c.appendChild(el("p", { cls: "who", style: "margin:0", text: "Scan each spool once it is erected. The register records it as Erected in the selected module with the time, your name and the GPS position. Spools already erected are refused." }));
       c.appendChild(el("p", { id: "scanGpsNote", cls: "who", style: "margin:6px 0 0;font-weight:600" })); scanGpsText();
       return;
