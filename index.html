@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "20";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "21";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -706,10 +706,19 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (hit && hit[2]) return hit[2];
     var m = /^(\d{4})-/.exec(String(s || "")); return m && ((cfg && cfg.projects) || []).indexOf(m[1]) >= 0 ? m[1] : "";
   }
+  // Project and From / To refresh each other: a project hides the other yard's locations, and a yard location hides projects locked to the other yard.
   function filterDispatchLocs() {
-    var p = $("dProject").value, L = ((cfg && cfg.locations) || []).filter(function (l) { return locOk(p, l); });
-    fill($("dFrom"), L); fill($("dTo"), L);
-    var n = $("dYardNote"); if (n) { var y = yardOf(p); n.hidden = !y; n.textContent = y ? "Project " + p + " works in " + y + " only — " + (y === "MFY" ? "NEMY" : "MFY") + " locations are hidden." : ""; }
+    var p = $("dProject").value, f = $("dFrom").value, t = $("dTo").value;
+    var P = ((cfg && cfg.projects) || []).filter(function (x) { return locOk(x, f) && locOk(x, t); });
+    var L = ((cfg && cfg.locations) || []).filter(function (l) { return locOk(p, l); });
+    fill($("dProject"), P); fill($("dFrom"), L); fill($("dTo"), L);
+    if (!$("dProject").value && P.length === 1) $("dProject").value = P[0];
+    p = $("dProject").value;
+    var n = $("dYardNote"); if (n) {
+      var y = yardOf(p), hid = ((cfg && cfg.projects) || []).length - P.length;
+      n.textContent = y ? "Project " + p + " works in " + y + " only — " + (y === "MFY" ? "NEMY" : "MFY") + " locations are hidden." : hid ? hid + " project(s) of the other yard are hidden for the chosen location." : "";
+      n.hidden = !n.textContent;
+    }
   }
   function goHome() {
     clearStatus();
@@ -798,7 +807,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   $("dRecv").addEventListener("change", function () { $("dRecvOther").hidden = $("dRecv").value !== "other"; showRecvMail(); });
   $("dRecv2").addEventListener("change", function () { $("dRecv2Other").hidden = $("dRecv2").value !== "other"; showRecvMail(); });
 
-  $("dProject").addEventListener("change", filterDispatchLocs);
+  ["dProject", "dFrom", "dTo"].forEach(function (id) { $(id).addEventListener("change", filterDispatchLocs); });
   function startDispatch() {
     clearStatus();
     fill($("dProject"), cfg.projects); fill($("dFrom"), cfg.locations); fill($("dTo"), cfg.locations); fill($("dPurpose"), cfg.purposes);
@@ -927,11 +936,20 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (!draft.project && projsE.indexOf(load("sd-erect-project")) >= 0) draft.project = load("sd-erect-project");
       // Module No list follows the selected Project No (Lists tab: Module No + Module Project No; blank project = every project)
       var normE = function (v) { return String(v || "").replace(/\s+/g, "").toUpperCase(); };
-      var mapE = (cfg && cfg.moduleMap) || null, locsE = !mapE ? ((cfg && cfg.modules) || []) : !draft.project ? [] :
-        mapE.filter(function (x) { return !x.p || normE(x.p) === normE(draft.project); }).map(function (x) { return x.m; })
-          .filter(function (m, i, a) { return a.indexOf(m) === i; });
+      // ...and a chosen Module No narrows the Project No list to its project (picked automatically).
+      var mapE = (cfg && cfg.moduleMap) || null, modsE = function () { return !mapE ? ((cfg && cfg.modules) || []) :
+        mapE.filter(function (x) { return !draft.project || !x.p || normE(x.p) === normE(draft.project); }).map(function (x) { return x.m; })
+          .filter(function (m, i, a) { return a.indexOf(m) === i; }); };
+      var locsE = modsE();
       if (draft.yard && locsE.indexOf(draft.yard) < 0) draft.yard = "";
       if (!draft.yard && locsE.indexOf(load("sd-erect-module")) >= 0) draft.yard = load("sd-erect-module");
+      if (mapE && draft.yard) {
+        var ownE = mapE.filter(function (x) { return x.m === draft.yard; });
+        if (!ownE.some(function (x) { return !x.p; })) projsE = projsE.filter(function (p) { return ownE.some(function (x) { return normE(x.p) === normE(p); }); });
+        if (draft.project && projsE.indexOf(draft.project) < 0) draft.project = "";
+        if (!draft.project && projsE.length === 1) { draft.project = projsE[0]; store("sd-erect-project", draft.project); saveDraft(); }
+        locsE = modsE();
+      }
       var pickE = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
       [["Project No", "erectProject", projsE, draft.project, "project", "sd-erect-project"], ["Module No", "erectModule", locsE, draft.yard, "yard", "sd-erect-module"]].forEach(function (f) {
         var lab = el("label", { cls: "f" }); lab.appendChild(document.createTextNode(f[0]));
@@ -952,10 +970,14 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (!yards.length) yards = ["NMDC (MFY)", "NMDC (NEMY)"];
       var projs = (cfg && cfg.projects) || [];
       if (!draft.project && projs.indexOf(load("sd-relo-project")) >= 0) draft.project = load("sd-relo-project");
+      // Project and Yard refresh each other from the Lists tab "Project Yard" column.
       yards = yards.filter(function (y) { return locOk(draft.project, y); });
       if (draft.yard && yards.indexOf(draft.yard) < 0) draft.yard = "";
       if (!draft.yard && yards.indexOf(load("sd-relo-yard")) >= 0) draft.yard = load("sd-relo-yard");
       if (!draft.yard && draft.project && yards.length === 1) draft.yard = yards[0];
+      projs = projs.filter(function (p) { return locOk(p, draft.yard); });
+      if (draft.project && projs.indexOf(draft.project) < 0) draft.project = "";
+      if (!draft.project && draft.yard && projs.length === 1) draft.project = projs[0];
       var pick = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
       [["Project No", "reloProject", projs, draft.project, "project", "sd-relo-project"], ["Yard", "reloYard", yards, draft.yard, "yard", "sd-relo-yard"]].forEach(function (f) {
         var lab = el("label", { cls: "f" }); lab.appendChild(document.createTextNode(f[0]));
