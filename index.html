@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "19";</script>
+<script>window.SPOOL_API = "https://script.google.com/macros/s/AKfycbxU2a7WwbFSZxWA0pRmsOrWjvg0jJquWbD0EvOdA05eQY6-iNIVVzJJUQro0VMU5x_RrQ/exec"; window.SPOOL_APP_VERSION = "20";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <style>
 /* NMDC look: black top bar, white strip, sky-blue accent, blue-grey panels */
@@ -216,6 +216,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     <div class="card">
       <h2>Delivery details</h2>
       <label class="f">Project No <span class="req">*</span><select id="dProject"></select></label>
+      <p id="dYardNote" class="who" style="margin:-4px 0 8px;font-weight:700;color:var(--warn)" hidden></p>
       <div class="row2">
         <label class="f">From <span class="req">*</span><select id="dFrom"></select></label>
         <label class="f">To <span class="req">*</span><select id="dTo"></select></label>
@@ -696,6 +697,20 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
 
   // Relocation and erection share the yard scanning screen (Project No + location, GPS per scan)
   function yardMode(d) { return !!d && (d.mode === "relocate" || d.mode === "erect"); }
+  // Project / yard rule from the Lists tab "Project Yard" column (e.g. 2642 = MFY only, 2883 = NEMY only).
+  // Locations naming the other yard are hidden; spools of another project are refused. The server enforces the same rule.
+  function yardOf(p) { return ((cfg && cfg.projectYard) || {})[String(p || "").trim()] || ""; }
+  function locOk(p, loc) { var y = yardOf(p); if (!y || !loc) return true; var o = y === "MFY" ? "NEMY" : "MFY"; return !new RegExp("(^|[^A-Z])" + o + "([^A-Z]|$)", "i").test(loc); }
+  function spoolProj(s) {
+    var u = String(s || "").toUpperCase(), hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === u; })[0];
+    if (hit && hit[2]) return hit[2];
+    var m = /^(\d{4})-/.exec(String(s || "")); return m && ((cfg && cfg.projects) || []).indexOf(m[1]) >= 0 ? m[1] : "";
+  }
+  function filterDispatchLocs() {
+    var p = $("dProject").value, L = ((cfg && cfg.locations) || []).filter(function (l) { return locOk(p, l); });
+    fill($("dFrom"), L); fill($("dTo"), L);
+    var n = $("dYardNote"); if (n) { var y = yardOf(p); n.hidden = !y; n.textContent = y ? "Project " + p + " works in " + y + " only — " + (y === "MFY" ? "NEMY" : "MFY") + " locations are hidden." : ""; }
+  }
   function goHome() {
     clearStatus();
     OFF.renderOutbox(); OFF.pill(); OFF.installCard(); OFF.pushCard();
@@ -783,6 +798,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
   $("dRecv").addEventListener("change", function () { $("dRecvOther").hidden = $("dRecv").value !== "other"; showRecvMail(); });
   $("dRecv2").addEventListener("change", function () { $("dRecv2Other").hidden = $("dRecv2").value !== "other"; showRecvMail(); });
 
+  $("dProject").addEventListener("change", filterDispatchLocs);
   function startDispatch() {
     clearStatus();
     fill($("dProject"), cfg.projects); fill($("dFrom"), cfg.locations); fill($("dTo"), cfg.locations); fill($("dPurpose"), cfg.purposes);
@@ -806,6 +822,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       $("dRemarks").value = ""; $("dRecv").value = ""; $("dRecvOther").hidden = true; $("dRecvName").value = ""; $("dRecvEmail").value = "";
       $("dRecv2").value = ""; $("dRecv2Other").hidden = true; $("dRecv2Name").value = ""; $("dRecv2Email").value = "";
     }
+    filterDispatchLocs();
     showRecvMail();
     show("vDispatch");
   }
@@ -818,6 +835,7 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (!h.project) miss.push("Project"); if (!h.from) miss.push("From"); if (!h.to) miss.push("To"); if (!h.purpose) miss.push("Purpose");
     if (!h.receiverName) miss.push("Receiver name");
     if (miss.length) { setStatus("bad", "Please fill: " + miss.join(", ")); return null; }
+    if (!locOk(h.project, h.from) || !locOk(h.project, h.to)) { setStatus("bad", "Project " + h.project + " works in " + yardOf(h.project) + " only. Choose From / To again."); return null; }
     if (!isEmail(h.receiverEmail)) { setStatus("bad", "Receiver email is not valid."); return null; }
     var r2 = $("dRecv2").value;
     h.receiver2Name = ""; h.receiver2Email = "";
@@ -934,7 +952,10 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
       if (!yards.length) yards = ["NMDC (MFY)", "NMDC (NEMY)"];
       var projs = (cfg && cfg.projects) || [];
       if (!draft.project && projs.indexOf(load("sd-relo-project")) >= 0) draft.project = load("sd-relo-project");
+      yards = yards.filter(function (y) { return locOk(draft.project, y); });
+      if (draft.yard && yards.indexOf(draft.yard) < 0) draft.yard = "";
       if (!draft.yard && yards.indexOf(load("sd-relo-yard")) >= 0) draft.yard = load("sd-relo-yard");
+      if (!draft.yard && draft.project && yards.length === 1) draft.yard = yards[0];
       var pick = el("div", { cls: "pick", style: "grid-template-columns:1fr 1fr;margin:4px 0 10px" });
       [["Project No", "reloProject", projs, draft.project, "project", "sd-relo-project"], ["Yard", "reloYard", yards, draft.yard, "yard", "sd-relo-yard"]].forEach(function (f) {
         var lab = el("label", { cls: "f" }); lab.appendChild(document.createTextNode(f[0]));
@@ -1000,6 +1021,8 @@ a.sendmail { display:flex; align-items:center; justify-content:center; gap:10px;
     if (yardMode(draft) && !(draft.project && draft.yard)) { setStatus("bad", draft.mode === "erect" ? "Select the Project No and the Module No first." : "Select the Project No and the Yard first."); return false; }
     var hit = ((cfg && cfg.spools) || []).filter(function (r) { return r[0].toUpperCase() === spool.toUpperCase(); })[0];
     if (hit) spool = hit[0];
+    var pj = draft.mode === "receive" ? "" : yardMode(draft) ? draft.project : (draft.header && draft.header.project), sp = pj ? spoolProj(spool) : "";
+    if (pj && sp && sp !== String(pj).trim()) { setStatus("bad", "Belongs to project " + sp + ", not " + pj + " — not added:", spool); return false; }
     var item = { spool: spool, ts: Date.now() };
     if (log) item.log = log;
     if (yardMode(draft) && scanFix && Date.now() - scanFix.t < 60000) item.gps = { lat: scanFix.lat, lng: scanFix.lng, acc: scanFix.acc };
